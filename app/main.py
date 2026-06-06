@@ -1,12 +1,12 @@
 """FastAPI 앱: 트리맵 페이지 + 히트맵 API."""
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import db, heatmap, news, auth, billing, config
+from app import db, heatmap, news, auth, billing, summarize, config
 
 app = FastAPI(title="KOSPI200 Heatmap")
 app.add_middleware(SessionMiddleware, secret_key=config.SESSION_SECRET,
@@ -28,15 +28,28 @@ def api_heatmap(period: str = "실시간"):
 
 
 @app.get("/api/news")
-def api_news(ticker: str = "", name: str = ""):
-    """종목 뉴스(최근 24h, 최신순 최대 10). ticker 또는 name 으로 조회."""
+def api_news(request: Request, ticker: str = "", name: str = ""):
+    """종목 뉴스(최근 24h, 최신순 최대 10) + 구독자 전용 AI 요약."""
     if ticker and not name:
         try:
             name = str(heatmap.get_builder().name_of.get(ticker) or "")
         except Exception:
             name = ""
     result = news.get_news(name)
-    return JSONResponse({"ticker": ticker, "name": name, **result})
+    items = result.get("items") or []
+
+    # AI 요약: 구독자에게만 제공, 비구독자에겐 잠금(업셀) 표시
+    user = auth.current_user(request)
+    is_sub = db.is_active_subscriber(user) if user else False
+    summary, summary_locked = None, False
+    if items and summarize.enabled():
+        if is_sub:
+            summary = summarize.get_summary(name, items)
+        else:
+            summary_locked = True
+
+    return JSONResponse({"ticker": ticker, "name": name, **result,
+                         "summary": summary, "summary_locked": summary_locked})
 
 
 @app.get("/api/ad")

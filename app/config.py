@@ -34,6 +34,11 @@ NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 NEWS_CACHE_TTL = float(os.getenv("NEWS_CACHE_TTL", "1800"))   # 뉴스 캐시(초, 기본 30분)
 
+# AI 요약 (Google Gemini 무료 티어, 구독자 전용)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+SUMMARY_CACHE_TTL = float(os.getenv("SUMMARY_CACHE_TTL", "1800"))
+
 # 호재/악재 분류 (V2.1)
 # keyword(기본,무료) | ollama(무료,로컬) | openai(유료)
 SENTIMENT_PROVIDER = os.getenv("SENTIMENT_PROVIDER", "keyword")

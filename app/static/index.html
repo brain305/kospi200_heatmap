@@ -74,6 +74,12 @@
   .news-headline{ font-size:17px; line-height:1.45; }
   .news-meta{ color:var(--muted); font-size:13px; margin-top:6px; }
   .news-empty{ color:var(--muted); font-size:15px; padding:60px 12px; text-align:center; }
+  .news-summary{ background:#2b313f; border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin:4px 0 14px; }
+  .news-summary .s-title{ font-size:13px; font-weight:700; color:#9fd4ff; margin-bottom:6px; }
+  .news-summary .s-body{ font-size:14px; line-height:1.55; white-space:pre-line; }
+  .news-summary.locked{ text-align:center; color:var(--muted); }
+  .news-summary.locked .btn-sub{ margin-top:8px; display:inline-block; }
   .sent{ display:inline-block; font-size:12px; font-weight:700; padding:2px 9px;
     border-radius:6px; margin-right:8px; vertical-align:middle; }
   .sent-pos{ background:#0a9d4a; color:#fff; }
@@ -202,7 +208,15 @@ function renderNews(d){
     setBody('<div class="news-empty">최근 24시간 내 뉴스가 없어요.</div>');
     return;
   }
-  setBody(items.map(it=>`
+  let head = "";
+  if(d.summary){
+    head = `<div class="news-summary"><div class="s-title">🤖 AI 요약</div>`
+         + `<div class="s-body">${escapeHtml(d.summary)}</div></div>`;
+  } else if(d.summary_locked){
+    head = `<div class="news-summary locked">🔒 AI 요약은 구독자 전용이에요.`
+         + `<br><span class="btn btn-sub" onclick="startSubscribe()">구독하고 요약 보기</span></div>`;
+  }
+  setBody(head + items.map(it=>`
     <a class="news-item" href="${it.link}" target="_blank" rel="noopener">
       <div class="news-headline">${sentBadge(it.label)}${escapeHtml(it.title)}</div>
       <div class="news-meta">${escapeHtml(it.source||"")} · ${fmtTime(it.pub)}</div>
