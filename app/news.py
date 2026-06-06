@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from app import config
+from app import config, sentiment
 
 KST = dt.timezone(dt.timedelta(hours=9))
 _TAG = re.compile(r"<[^>]+>")
@@ -88,5 +88,6 @@ def get_news(name):
     except Exception as e:
         return {"items": [], "error": f"fetch_failed: {e}"}
 
+    sentiment.classify(items, name=name)   # 각 항목에 호재/악재/중립 label 부여(키 없으면 생략)
     _cache[name] = (now, items)
     return {"items": items}

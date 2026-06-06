@@ -44,6 +44,11 @@
   .news-headline{ font-size:17px; line-height:1.45; }
   .news-meta{ color:var(--muted); font-size:13px; margin-top:6px; }
   .news-empty{ color:var(--muted); font-size:15px; padding:60px 12px; text-align:center; }
+  .sent{ display:inline-block; font-size:12px; font-weight:700; padding:2px 9px;
+    border-radius:6px; margin-right:8px; vertical-align:middle; }
+  .sent-pos{ background:#0a9d4a; color:#fff; }
+  .sent-neg{ background:#c40000; color:#fff; }
+  .sent-neu{ background:#3a4253; color:#cfd4de; }
 </style>
 </head>
 <body>
@@ -59,7 +64,7 @@
     <div id="newsHead">
       <div id="newsHeadL">
         <span id="newsTitle"></span>
-        <span id="newsSub">최근 24시간 · 최신순 최대 10건</span>
+        <span id="newsSub">최근 24시간 · 최신순 최대 10건 · 호재/악재는 자동 추정(참고용)</span>
       </div>
       <span id="newsClose" onclick="closeNews()">← 뒤로</span>
     </div>
@@ -161,9 +166,15 @@ function renderNews(d){
   }
   setBody(items.map(it=>`
     <a class="news-item" href="${it.link}" target="_blank" rel="noopener">
-      <div class="news-headline">${escapeHtml(it.title)}</div>
+      <div class="news-headline">${sentBadge(it.label)}${escapeHtml(it.title)}</div>
       <div class="news-meta">${escapeHtml(it.source||"")} · ${fmtTime(it.pub)}</div>
     </a>`).join(""));
+}
+
+function sentBadge(label){
+  if(!label) return "";
+  const cls = label==="호재" ? "sent-pos" : (label==="악재" ? "sent-neg" : "sent-neu");
+  return `<span class="sent ${cls}">${label}</span>`;
 }
 
 function closeNews(){ document.getElementById("newsPanel").classList.remove("open"); }

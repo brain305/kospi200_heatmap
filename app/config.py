@@ -33,6 +33,16 @@ NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 NEWS_CACHE_TTL = float(os.getenv("NEWS_CACHE_TTL", "1800"))   # 뉴스 캐시(초, 기본 30분)
 
+# 호재/악재 분류 (V2.1)
+# keyword(기본,무료) | ollama(무료,로컬) | openai(유료)
+SENTIMENT_PROVIDER = os.getenv("SENTIMENT_PROVIDER", "keyword")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_BASE = os.getenv("OPENAI_BASE", "https://api.openai.com/v1")
+# Ollama (로컬 무료). 도커 컨테이너에서 호스트 접근은 host.docker.internal
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+
 # 실시간 조회 설정
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))
 RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))
