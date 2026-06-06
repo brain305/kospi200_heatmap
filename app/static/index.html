@@ -186,16 +186,38 @@ function bindClick(){
 function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
 function fmtTime(iso){ try{ return new Date(iso).toLocaleString("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso; } }
 
+let curNews = null, curTicker = "";
 async function openNews(ticker, name){
+  curTicker = ticker; curNews = null;
   const panel = document.getElementById("newsPanel");
   panel.classList.add("open");
   document.getElementById("newsTitle").textContent = name || ticker;
   setBody('<div class="news-empty">불러오는 중…</div>');
   try{
     const r = await fetch(`/api/news?ticker=${encodeURIComponent(ticker)}`);
-    renderNews(await r.json());
+    curNews = await r.json();
+    renderNews(curNews);
   }catch(e){
     setBody('<div class="news-empty">불러오기 실패</div>');
+  }
+}
+
+// '요약 보기' 클릭 시에만 Gemini 호출 (토큰 절약)
+async function loadSummary(){
+  if(!curNews) return;
+  const btn = document.getElementById("sumBtn");
+  if(btn){ btn.textContent = "요약 생성 중…"; btn.style.pointerEvents = "none"; }
+  try{
+    const s = await (await fetch(`/api/summary?ticker=${encodeURIComponent(curTicker)}`, {cache:"no-store"})).json();
+    if(s.error){ alert("요약을 불러올 수 없어요."); if(btn){btn.textContent="🤖 AI 종합 요약 보기"; btn.style.pointerEvents="";} return; }
+    if(s.limited){ curNews.summary_limited = true; curNews.ai_used = s.ai_used; curNews.ai_limit = s.ai_limit; renderNews(curNews); return; }
+    curNews.summary = s.summary; curNews.sentiment = s.sentiment; curNews.score = s.score;
+    curNews.ai_used = s.ai_used; curNews.ai_limit = s.ai_limit;
+    (curNews.items||[]).forEach((it,i)=>{ it.summary = (s.summaries||[])[i]; it.label = (s.labels||[])[i]; });
+    renderNews(curNews);
+  }catch(e){
+    alert("요약 생성 중 오류가 발생했어요.");
+    if(btn){ btn.textContent="🤖 AI 종합 요약 보기"; btn.style.pointerEvents=""; }
   }
 }
 
@@ -225,6 +247,12 @@ function renderNews(d){
   } else if(d.summary_limited){
     head = `<div class="news-summary locked">⏳ 오늘 AI 요약 한도(${d.ai_limit||10}회)를 모두 사용했어요.`
          + `<br>내일 다시 이용할 수 있어요.</div>`;
+  } else if(d.summary_available){
+    const note = d.summary_cached
+      ? "이미 생성됨 · 무료"
+      : `클릭 시 1회 사용 · 오늘 ${d.ai_used}/${d.ai_limit}`;
+    head = `<div class="news-summary"><span class="btn btn-sub" id="sumBtn" onclick="loadSummary()">🤖 AI 종합 요약 보기</span>`
+         + ` <span class="ai-usage">${note}</span></div>`;
   } else if(d.summary_locked){
     head = `<div class="news-summary locked">🔒 AI 요약은 구독자 전용이에요.`
          + `<br><span class="btn btn-sub" onclick="startSubscribe()">구독하고 요약 보기</span></div>`;

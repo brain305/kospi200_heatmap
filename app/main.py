@@ -38,45 +38,63 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
     result = news.get_news(name)
     items = result.get("items") or []
 
-    # AI 요약: 구독자에겐 기사별 2~3줄 요약, 비구독자에겐 잠금(업셀) 표시
+    # AI 요약은 '요약 보기' 버튼(/api/summary)에서만 생성 → 토큰 절약.
+    # 여기선 가능 여부/사용량/캐시여부 플래그만 내려줌.
     user = auth.current_user(request)
     is_sub = db.is_active_subscriber(user) if user else False
-    summary_locked = False
-    summary_limited = False
-    overall = sentiment = score = None
+    summary_available = summary_locked = False
     ai_used = ai_limit = None
-    out_items = items
+    summary_cached = False
     if items and summarize.enabled():
-        if not is_sub:
-            summary_locked = True
-        else:
-            n = len(items)
+        if is_sub:
+            summary_available = True
             ai_limit = config.AI_DAILY_LIMIT
-            if summarize.has_cached(name, n):
-                generate = True                       # 캐시 히트: Gemini 미호출 → 차감 안 함
-            else:
-                used = db.get_ai_usage(user["id"])
-                if used >= ai_limit:
-                    generate = False
-                    summary_limited = True
-                else:
-                    db.incr_ai_usage(user["id"])      # 생성(캐시 미스) → 1회 차감
-                    generate = True
             ai_used = db.get_ai_usage(user["id"])
-            if generate:
-                res2 = summarize.get_summaries(name, items)
-                overall = res2["overall"] or None
-                sentiment = res2["sentiment"]
-                score = res2["score"]
-                # 캐시 오염(비구독자 노출) 방지를 위해 복사본에만 요약/라벨 부착
-                out_items = [{**it, "summary": res2["summaries"][i], "label": res2["labels"][i]}
-                             for i, it in enumerate(items)]
+            summary_cached = summarize.has_cached(name, len(items))
+        else:
+            summary_locked = True
 
     payload = {k: v for k, v in result.items() if k != "items"}
-    return JSONResponse({"ticker": ticker, "name": name, "items": out_items,
-                         "summary": overall, "sentiment": sentiment, "score": score,
-                         "summary_locked": summary_locked, "summary_limited": summary_limited,
+    return JSONResponse({"ticker": ticker, "name": name, "items": items,
+                         "summary_available": summary_available, "summary_locked": summary_locked,
+                         "summary_cached": summary_cached,
                          "ai_used": ai_used, "ai_limit": ai_limit, **payload})
+
+
+@app.get("/api/summary")
+def api_summary(request: Request, ticker: str = "", name: str = ""):
+    """버튼 클릭 시에만 호출 → Gemini 생성(캐시 히트는 무차감, 일일 한도 적용). 구독자 전용."""
+    if ticker and not name:
+        try:
+            name = str(heatmap.get_builder().name_of.get(ticker) or "")
+        except Exception:
+            name = ""
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    if not db.is_active_subscriber(user):
+        return JSONResponse({"error": "subscribers_only"}, status_code=403)
+    if not summarize.enabled():
+        return JSONResponse({"error": "disabled"}, status_code=503)
+
+    items = (news.get_news(name).get("items") or [])
+    n = len(items)
+    ai_limit = config.AI_DAILY_LIMIT
+    if n == 0:
+        return JSONResponse({"summary": None, "summaries": [], "labels": [],
+                             "ai_used": db.get_ai_usage(user["id"]), "ai_limit": ai_limit})
+
+    if not summarize.has_cached(name, n):       # 캐시 미스 → 한도 확인 후 차감
+        if db.get_ai_usage(user["id"]) >= ai_limit:
+            return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit})
+        db.incr_ai_usage(user["id"])
+    res = summarize.get_summaries(name, items)
+    return JSONResponse({
+        "summary": res["overall"] or None, "sentiment": res["sentiment"], "score": res["score"],
+        "summaries": res["summaries"], "labels": res["labels"],
+        "ai_used": db.get_ai_usage(user["id"]), "ai_limit": ai_limit,
+    }, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/ad")
