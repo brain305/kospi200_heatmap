@@ -84,7 +84,9 @@ function renderTabs(){
   });
 }
 
+let lastData = null;
 function draw(d){
+  lastData = d;
   const data = [{
     type:"treemap", branchvalues:"total",
     ids:d.ids, labels:d.labels, parents:d.parents, values:d.values,
@@ -113,10 +115,14 @@ function bindClick(){
   gd.on("plotly_treemapclick", function(ev){
     const p = ev.points && ev.points[0];
     if(!p) return;
-    const id = p.id || "";
-    if(id.indexOf("stk::") === 0){      // 종목(리프) 클릭 → 뉴스
-      openNews(id.slice(5), p.label);
-      return false;                     // 기본 동작(확대) 막기
+    // Plotly 버전에 따라 p.id 가 없을 수 있어 pointNumber 로 ids 를 역참조
+    let id = p.id;
+    if(!id && lastData && typeof p.pointNumber === "number") id = lastData.ids[p.pointNumber];
+    if(id && id.indexOf("stk::") === 0){      // 종목(리프) 클릭 → 뉴스
+      const ticker = id.slice(5);
+      const label = p.label || (lastData ? lastData.labels[p.pointNumber] : ticker);
+      openNews(ticker, label);
+      return false;                            // 기본 동작(확대) 막기
     }
     // 업종 클릭은 기본 확대 동작 유지
   });

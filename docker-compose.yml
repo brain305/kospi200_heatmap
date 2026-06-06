@@ -55,7 +55,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - token_cache:/srv          # kis_token.json 유지
+      - token_cache:/srv/data     # kis_token.json 만 유지 (/srv 전체를 덮지 않도록!)
+      - ./app:/srv/app            # 코드 라이브 반영(html/py 수정 시 재빌드 불필요)
       - ./seed:/seed:ro           # 초기 적재용 CSV 마운트(선택)
 
   # 평일 18:00 자동 업데이트 + 매일 18:30 백업 (Phase 5)
@@ -77,7 +78,8 @@ services:
     command: ["python", "-m", "app.scheduler"]
     volumes:
       - ./backups:/backups        # 백업 파일(csv.gz) 호스트에 보관
-      - token_cache:/srv
+      - token_cache:/srv/data
+      - ./app:/srv/app
 
 volumes:
   mysql_data:

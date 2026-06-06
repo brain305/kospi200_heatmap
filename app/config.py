@@ -39,7 +39,7 @@ RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))
 RT_CACHE_TTL = float(os.getenv("RT_CACHE_TTL", "10"))   # 실시간 서버 캐시(초)
 DF_CACHE_TTL = float(os.getenv("DF_CACHE_TTL", "300"))  # DB 로딩 캐시(초)
 
-TOKEN_CACHE = os.path.join(PROJECT_DIR, "kis_token.json")
+TOKEN_CACHE = os.getenv("TOKEN_CACHE", os.path.join(PROJECT_DIR, "data", "kis_token.json"))
 
 # 백업/스케줄
 BACKUP_DIR = os.getenv("BACKUP_DIR", "/backups")

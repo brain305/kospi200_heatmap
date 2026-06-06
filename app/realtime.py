@@ -32,6 +32,7 @@ def _issue_token():
     token = data["access_token"]
     expires_at = time.time() + int(data.get("expires_in", 82800))
     try:
+        os.makedirs(os.path.dirname(config.TOKEN_CACHE), exist_ok=True)
         with open(config.TOKEN_CACHE, "w") as f:
             json.dump({"access_token": token, "expires_at": expires_at}, f)
     except Exception:
