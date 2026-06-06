@@ -50,7 +50,8 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
             summary_available = True
             ai_limit = config.ai_daily_limit(user)
             ai_used = db.get_ai_usage(user["id"])
-            summary_cached = summarize.has_cached(name, len(items))
+            # 오늘 이미 이 종목을 봤으면 재열람 무료
+            summary_cached = db.has_viewed(user["id"], name)
         else:
             summary_locked = True
 
@@ -84,12 +85,15 @@ def api_summary(request: Request, ticker: str = "", name: str = ""):
         return JSONResponse({"summary": None, "summaries": [], "labels": [],
                              "ai_used": db.get_ai_usage(user["id"]), "ai_limit": ai_limit})
 
-    if not summarize.has_cached(name, n):       # 캐시 미스 → 한도 확인 후 차감
+    # 과금 정책: (사용자×날짜×종목) 단위 1회 차감. 남이 만든 캐시여도 내가 처음 보면 차감,
+    # 같은 종목 재열람은 무료. Gemini 실제 호출은 캐시 미스일 때만(우리 비용 절약).
+    already = db.has_viewed(user["id"], name)
+    if not already:
         if db.get_ai_usage(user["id"]) >= ai_limit:
             return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
                                  "ai_limit": ai_limit})
-        db.incr_ai_usage(user["id"])
-    res = summarize.get_summaries(name, items)
+        db.add_view(user["id"], name)           # 1회 차감(캐시 여부 무관)
+    res = summarize.get_summaries(name, items)   # 캐시 히트면 Gemini 미호출
     return JSONResponse({
         "summary": res["overall"] or None, "sentiment": res["sentiment"], "score": res["score"],
         "summaries": res["summaries"], "labels": res["labels"],

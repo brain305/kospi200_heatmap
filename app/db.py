@@ -3,7 +3,7 @@ import datetime as dt
 
 from sqlalchemy import (create_engine, MetaData, Table, Column, Date, DateTime,
                         String, Boolean, BigInteger, Integer, PrimaryKeyConstraint,
-                        UniqueConstraint, Index, select)
+                        UniqueConstraint, Index, select, func)
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -108,36 +108,47 @@ def set_order_status(order_id, status):
         conn.execute(orders.update().where(orders.c.order_id == order_id).values(status=status))
 
 
-# ── AI 요약 일일 사용량 ───────────────────────────────────────
-ai_usage = Table(
-    "ai_usage", metadata,
+# ── AI 요약 열람 기록 (사용자×날짜×종목 단위 1회 과금) ──────────
+ai_views = Table(
+    "ai_views", metadata,
     Column("user_id", BigInteger, nullable=False),
     Column("day", Date, nullable=False),
-    Column("count", Integer, nullable=False, server_default="0"),
-    PrimaryKeyConstraint("user_id", "day"),
+    Column("name", String(40), nullable=False),
+    Column("created_at", DateTime, nullable=True),
+    PrimaryKeyConstraint("user_id", "day", "name"),
 )
 
 
 def get_ai_usage(user_id, day=None):
+    """오늘 차감된 종목 수(=요약 열람한 고유 종목 수)."""
     day = day or dt.date.today()
     with get_engine().connect() as conn:
-        v = conn.execute(select(ai_usage.c.count).where(
-            ai_usage.c.user_id == user_id, ai_usage.c.day == day)).scalar()
-        return int(v or 0)
+        return int(conn.execute(
+            select(func.count()).select_from(ai_views).where(
+                ai_views.c.user_id == user_id, ai_views.c.day == day)).scalar() or 0)
 
 
-def incr_ai_usage(user_id, day=None):
-    """오늘 사용량 +1, 갱신된 값 반환."""
+def has_viewed(user_id, name, day=None):
+    """오늘 이 종목을 이미 차감했는지(재열람은 무료)."""
+    day = day or dt.date.today()
+    with get_engine().connect() as conn:
+        return conn.execute(select(ai_views.c.name).where(
+            ai_views.c.user_id == user_id, ai_views.c.day == day,
+            ai_views.c.name == name)).first() is not None
+
+
+def add_view(user_id, name, day=None):
+    """차감 기록 추가. 새로 차감되면 True, 이미 있으면 False."""
     day = day or dt.date.today()
     with get_engine().begin() as conn:
-        cur = conn.execute(select(ai_usage.c.count).where(
-            ai_usage.c.user_id == user_id, ai_usage.c.day == day)).scalar()
-        if cur is None:
-            conn.execute(ai_usage.insert().values(user_id=user_id, day=day, count=1))
-            return 1
-        conn.execute(ai_usage.update().where(
-            ai_usage.c.user_id == user_id, ai_usage.c.day == day).values(count=cur + 1))
-        return cur + 1
+        exists = conn.execute(select(ai_views.c.name).where(
+            ai_views.c.user_id == user_id, ai_views.c.day == day,
+            ai_views.c.name == name)).first()
+        if exists:
+            return False
+        conn.execute(ai_views.insert().values(
+            user_id=user_id, day=day, name=name, created_at=dt.datetime.utcnow()))
+        return True
 
 
 def extend_subscription(user_id, days):

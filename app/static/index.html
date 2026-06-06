@@ -249,7 +249,7 @@ function renderNews(d){
          + `<br>내일 다시 이용할 수 있어요.</div>`;
   } else if(d.summary_available){
     const note = d.summary_cached
-      ? "이미 생성됨 · 무료"
+      ? "오늘 이미 열람 · 무료"
       : `클릭 시 1회 사용 · 오늘 ${d.ai_used}/${d.ai_limit}`;
     head = `<div class="news-summary"><span class="btn btn-sub" id="sumBtn" onclick="loadSummary()">🤖 AI 종합 요약 보기</span>`
          + ` <span class="ai-usage">${note}</span></div>`;
