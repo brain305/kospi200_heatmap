@@ -1,0 +1,15 @@
+.env
+kis_token.json
+*.sqlite
+*.db
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+
+# 데이터/백업은 커밋 안 함 (디렉터리만 .gitkeep 으로 유지)
+seed/*
+!seed/.gitkeep
+backups/*
+!backups/.gitkeep

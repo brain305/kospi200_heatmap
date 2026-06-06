@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KOSPI200 시가총액 트리맵</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{ --bg:#1b1f2a; --fg:#e6e6e6; --muted:#8a90a0; --panel:#2b313f; --border:#3a3f4b; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--fg);
+    font-family:Pretendard,'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+  #top{ text-align:center; padding:14px 0 6px; }
+  #title{ font-size:22px; font-weight:700; }
+  #asof{ color:var(--muted); font-size:14px; font-weight:400; margin-left:6px; }
+  #tabs{ display:flex; gap:6px; justify-content:center; margin:10px 0 4px; flex-wrap:wrap; }
+  .tab{ background:var(--panel); color:var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; }
+  .tab.active{ background:#e9edf5; color:#1b1f2a; font-weight:700; }
+  #chart{ width:100%; height:calc(100vh - 130px); }
+  #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
+  #status{ color:var(--muted); font-size:12px; margin-left:8px; }
+</style>
+</head>
+<body>
+  <div id="top">
+    <span id="title">KOSPI200 시가총액 트리맵</span><span id="asof"></span>
+    <span id="status"></span>
+    <div id="tabs"></div>
+  </div>
+  <div id="chart"></div>
+  <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대, 상단 'KOSPI200' 클릭 = 뒤로 · 장중엔 자동 갱신</div>
+
+<script>
+const PERIODS = ["실시간","1일","1주","1개월","3개월","1년","YTD"];
+let current = "실시간";
+let timer = null;
+const REFRESH_MS = 15000; // 장중 자동 갱신 주기
+
+function renderTabs(){
+  const box = document.getElementById("tabs");
+  box.innerHTML = "";
+  PERIODS.forEach(p=>{
+    const b = document.createElement("div");
+    b.className = "tab" + (p===current?" active":"");
+    b.textContent = p;
+    b.onclick = ()=>{ current=p; renderTabs(); load(); };
+    box.appendChild(b);
+  });
+}
+
+function draw(d){
+  const data = [{
+    type:"treemap", branchvalues:"total",
+    ids:d.ids, labels:d.labels, parents:d.parents, values:d.values,
+    text:d.text, texttemplate:"%{text}", customdata:d.customdata,
+    hovertemplate:"<b>%{label}</b><br>시총: %{customdata[0]}<br>수익률: %{customdata[1]}<extra></extra>",
+    marker:{ colors:d.colors, colorscale:d.colorscale, cmid:0, cmin:d.cmin, cmax:d.cmax,
+             line:{width:1,color:"#1b1f2a"},
+             colorbar:{ title:"등락률 %", ticksuffix:"%", tickfont:{color:"#e6e6e6"}, title_font:{color:"#e6e6e6"}, outlinewidth:0 } },
+    textfont:{ size:13, color:"#e6e6e6", family:"Pretendard,'Apple SD Gothic Neo',sans-serif" },
+    tiling:{ packing:"squarify" }, sort:true,
+    pathbar:{ visible:true, thickness:24, side:"top" },
+  }];
+  const layout = {
+    paper_bgcolor:"#1b1f2a", plot_bgcolor:"#1b1f2a",
+    margin:{l:8,r:8,t:8,b:8},
+    font:{ color:"#e6e6e6", family:"Pretendard,'Apple SD Gothic Neo',sans-serif" },
+  };
+  Plotly.react("chart", data, layout, {responsive:true, displayModeBar:false})
+    .then(togglePathbar);
+}
+
+function togglePathbar(){
+  document.querySelectorAll("#chart g.pathbar").forEach(pb=>{
+    const n = pb.querySelectorAll("g.slice").length;
+    pb.style.display = (n<=1) ? "none" : "";
+  });
+}
+
+async function load(){
+  try{
+    const r = await fetch(`/api/heatmap?period=${encodeURIComponent(current)}`);
+    const d = await r.json();
+    document.getElementById("asof").textContent = "· 기준 " + (d.as_of||"");
+    const st = document.getElementById("status");
+    if(current==="실시간"){
+      st.textContent = d.market_open ? "● 실시간(장중, 자동 갱신)" : "○ 장 마감 — 1일과 동일";
+      st.style.color = d.market_open ? "#23c265" : "#8a90a0";
+    } else { st.textContent = ""; }
+    draw(d);
+    scheduleRefresh(d.market_open);
+  }catch(e){
+    document.getElementById("status").textContent = "데이터 로드 실패";
+  }
+}
+
+function scheduleRefresh(marketOpen){
+  if(timer) clearTimeout(timer);
+  if(current==="실시간" && marketOpen){
+    timer = setTimeout(load, REFRESH_MS);
+  }
+}
+
+renderTabs();
+load();
+window.addEventListener("resize", togglePathbar);
+</script>
+</body>
+</html>
