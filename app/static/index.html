@@ -162,7 +162,7 @@ function draw(d){
              colorbar:{ title:"등락률 %", ticksuffix:"%", tickfont:{color:"#e6e6e6"}, title_font:{color:"#e6e6e6"}, outlinewidth:0 } },
     textfont:{ size:13, color:"#e6e6e6", family:"Pretendard,'Apple SD Gothic Neo',sans-serif" },
     tiling:{ packing:"squarify" }, sort:true,
-    pathbar:{ visible:true, thickness:24, side:"top" },
+    pathbar:{ visible:false },          // 얇은 경로바 대신 커스텀 '전체 보기' 버튼 사용
   }];
   const layout = {
     paper_bgcolor:"#1b1f2a", plot_bgcolor:"#1b1f2a",
@@ -170,7 +170,7 @@ function draw(d){
     font:{ color:"#e6e6e6", family:"Pretendard,'Apple SD Gothic Neo',sans-serif" },
   };
   Plotly.react("chart", data, layout, {responsive:true, displayModeBar:false})
-    .then(()=>{ togglePathbar(); bindClick(); });
+    .then(()=>{ bindClick(); showBack(false); });   // 탭 전환 시 항상 전체뷰로 시작
 }
 
 let _bound = false;
@@ -183,16 +183,19 @@ function bindClick(){
     // Plotly 버전에 따라 p.id 가 없을 수 있어 pointNumber 로 ids 를 역참조
     let id = p.id;
     if(!id && lastData && typeof p.pointNumber === "number") id = lastData.ids[p.pointNumber];
-    if(id && id.indexOf("stk::") === 0){      // 종목(리프) 클릭 → 뉴스
-      const ticker = id.slice(5);
-      const label = p.label || (lastData ? lastData.labels[p.pointNumber] : ticker);
-      openNews(ticker, label);
-      return false;                            // 기본 동작(확대) 막기
+    if(!id) return false;
+    if(id.indexOf("stk::") === 0){             // 종목 → 뉴스
+      const label = p.label || (lastData ? lastData.labels[p.pointNumber] : id.slice(5));
+      openNews(id.slice(5), label);
+      return false;
     }
-    // 업종 클릭은 기본 확대 동작 유지
+    if(id.indexOf("sec::") === 0){             // 업종 → 직접 확대 + 뒤로가기 버튼 표시
+      Plotly.restyle(gd, {level: id});
+      showBack(true);
+      return false;
+    }
+    return false;
   });
-  // 확대/축소(드릴다운)될 때마다 경로바·뒤로가기 버튼 갱신
-  gd.on("plotly_afterplot", function(){ setTimeout(togglePathbar, 0); });
   _bound = true;
 }
 
@@ -289,21 +292,17 @@ function sentBadge(label){
 function closeNews(){ document.getElementById("newsPanel").classList.remove("open"); }
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeNews(); });
 
-function togglePathbar(){
-  let drilled = false;
-  document.querySelectorAll("#chart g.pathbar").forEach(pb=>{
-    const n = pb.querySelectorAll("g.slice").length;
-    pb.style.display = (n<=1) ? "none" : "";
-    if(n > 1) drilled = true;        // 업종 안으로 들어간 상태
-  });
-  const back = document.getElementById("treeBack");
-  if(back) back.classList.toggle("show", drilled);
+function showBack(on){
+  const b = document.getElementById("treeBack");
+  if(b) b.classList.toggle("show", !!on);
 }
+function togglePathbar(){ /* 더 이상 경로바 의존 안 함 (호환용 빈 함수) */ }
 
 // 트리맵 전체(루트)로 되돌리기
 function goRoot(){
   const gd = document.getElementById("chart");
-  if(window.Plotly) Plotly.restyle(gd, {level: ""}).then(togglePathbar);
+  if(window.Plotly) Plotly.restyle(gd, {level: ""});
+  showBack(false);
 }
 
 async function load(){
