@@ -34,22 +34,26 @@ def _build_prompt(name, items):
     n = len(items)
     return (
         f"다음은 '{name}' 관련 최근 뉴스 {n}건이다.\n{body}\n\n"
-        f"각 기사를 투자자 관점에서 2~3문장으로 한국어 요약하라. "
-        f"제목/내용에 없는 사실 추측·과장 금지. "
-        f'반드시 JSON 으로만 출력: {{"summaries":["...","..."]}} '
-        f"배열 길이는 정확히 {n}, 입력 순서와 동일하게."
+        f"투자자 관점에서 한국어로 분석하라. 제목/내용에 없는 사실 추측·과장 금지.\n"
+        f'반드시 JSON 으로만 출력:\n'
+        f'{{"overall":"전체 흐름을 3문장으로 요약", '
+        f'"summaries":["기사1 2~3문장 요약","기사2 ...", ...]}}\n'
+        f"summaries 길이는 정확히 {n}, 입력 순서와 동일하게."
     )
 
 
-def parse_item_summaries(text, n):
-    """Gemini 응답 텍스트 -> 길이 n 의 요약 리스트."""
-    out = []
+def parse_result(text, n):
+    """Gemini 응답 -> {'overall': str, 'items': [str x n]}."""
+    overall, out = "", []
     try:
         m = re.search(r"\{.*\}", text, re.S)
-        out = json.loads(m.group(0) if m else text).get("summaries", [])
+        data = json.loads(m.group(0) if m else text)
+        overall = (data.get("overall") or "").strip()
+        out = data.get("summaries", []) or []
     except Exception:
-        out = []
-    return [(out[i].strip() if i < len(out) and isinstance(out[i], str) else "") for i in range(n)]
+        pass
+    items = [(out[i].strip() if i < len(out) and isinstance(out[i], str) else "") for i in range(n)]
+    return {"overall": overall, "items": items}
 
 
 def _gemini_text(prompt):
@@ -63,19 +67,20 @@ def _gemini_text(prompt):
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def get_item_summaries(name, items):
-    """각 기사 요약 리스트(len==len(items)). 캐시 사용. 실패/키없음 시 빈 문자열 리스트."""
+def get_summaries(name, items):
+    """전체+기사별 요약. 반환: {'overall': str, 'items': [str x n]}. 캐시 사용."""
     n = len(items)
+    empty = {"overall": "", "items": ["" for _ in range(n)]}
     if not enabled() or n == 0:
-        return ["" for _ in range(n)]
+        return empty
     now = time.time()
     cached = _cache.get(name)
-    if cached and now - cached[0] < config.SUMMARY_CACHE_TTL and len(cached[1]) == n:
+    if cached and now - cached[0] < config.SUMMARY_CACHE_TTL and len(cached[1]["items"]) == n:
         return cached[1]
     try:
-        summaries = parse_item_summaries(_gemini_text(_build_prompt(name, items)), n)
+        result = parse_result(_gemini_text(_build_prompt(name, items)), n)
     except Exception as e:
         print(f"[summarize] 실패: {e}")
-        return ["" for _ in range(n)]
-    _cache[name] = (now, summaries)
-    return summaries
+        return empty
+    _cache[name] = (now, result)
+    return result

@@ -30,14 +30,17 @@ def main():
         print("최근 24시간 내 뉴스가 없습니다.")
         return
 
-    # 기사별: 키워드 라벨 + AI 요약(2~3문장)
-    summaries = summarize.get_item_summaries(name, items) if summarize.enabled() else None
+    res = summarize.get_summaries(name, items) if summarize.enabled() else None
     if not summarize.enabled():
         print("(GEMINI_API_KEY 없음 → AI 요약 비활성, 키워드 라벨만 표시)\n")
+    if res:
+        print("── [AI 종합 요약] ─────────────────────────────")
+        print(res["overall"] or "(생성 실패)", "\n")
+    print("── [기사별] 키워드 + AI 요약 ───────────────────")
     for i, it in enumerate(items, 1):
         print(f"{i:>2}. [{it.get('label','중립')}] {it['title']}")
-        if summaries:
-            print(f"     ↳ AI요약: {summaries[i-1] or '(생성 실패)'}")
+        if res:
+            print(f"     ↳ AI요약: {res['items'][i-1] or '(생성 실패)'}")
 
 
 if __name__ == "__main__":

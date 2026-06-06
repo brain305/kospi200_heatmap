@@ -76,6 +76,8 @@
   .news-empty{ color:var(--muted); font-size:15px; padding:60px 12px; text-align:center; }
   .news-summary{ background:#2b313f; border:1px solid var(--border); border-radius:10px;
     padding:14px 16px; margin:4px 0 14px; }
+  .news-summary .s-title{ font-size:13px; font-weight:700; color:#9fd4ff; margin-bottom:6px; }
+  .news-summary .s-body{ font-size:14px; line-height:1.6; white-space:pre-line; }
   .news-summary.locked{ text-align:center; color:var(--muted); }
   .news-summary.locked .btn-sub{ margin-top:8px; display:inline-block; }
   /* 기사별 AI 요약 */
@@ -211,8 +213,11 @@ function renderNews(d){
     return;
   }
   let head = "";
-  if(d.summary_locked){
-    head = `<div class="news-summary locked">🔒 기사별 AI 요약은 구독자 전용이에요.`
+  if(d.summary){
+    head = `<div class="news-summary"><div class="s-title">🤖 AI 종합 요약</div>`
+         + `<div class="s-body">${escapeHtml(d.summary)}</div></div>`;
+  } else if(d.summary_locked){
+    head = `<div class="news-summary locked">🔒 AI 요약은 구독자 전용이에요.`
          + `<br><span class="btn btn-sub" onclick="startSubscribe()">구독하고 요약 보기</span></div>`;
   }
   setBody(head + items.map(it=>`
