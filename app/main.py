@@ -38,18 +38,22 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
     result = news.get_news(name)
     items = result.get("items") or []
 
-    # AI 요약: 구독자에게만 제공, 비구독자에겐 잠금(업셀) 표시
+    # AI 요약: 구독자에겐 기사별 2~3줄 요약, 비구독자에겐 잠금(업셀) 표시
     user = auth.current_user(request)
     is_sub = db.is_active_subscriber(user) if user else False
-    summary, summary_locked = None, False
+    summary_locked = False
+    out_items = items
     if items and summarize.enabled():
         if is_sub:
-            summary = summarize.get_summary(name, items)
+            summaries = summarize.get_item_summaries(name, items)
+            # 캐시 오염(비구독자 노출) 방지를 위해 복사본에만 summary 부착
+            out_items = [{**it, "summary": summaries[i]} for i, it in enumerate(items)]
         else:
             summary_locked = True
 
-    return JSONResponse({"ticker": ticker, "name": name, **result,
-                         "summary": summary, "summary_locked": summary_locked})
+    payload = {k: v for k, v in result.items() if k != "items"}
+    return JSONResponse({"ticker": ticker, "name": name, "items": out_items,
+                         "summary_locked": summary_locked, **payload})
 
 
 @app.get("/api/ad")

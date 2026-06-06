@@ -54,6 +54,7 @@ def parse_items(payload, now=None):
         link = it.get("originallink") or it.get("link") or ""
         rows.append({
             "title": _clean(it.get("title")),
+            "desc": _clean(it.get("description")),   # 본문 스니펫(요약 입력용)
             "link": link,
             "source": _source_from(link),
             "pub": pub.astimezone(KST).isoformat(),
