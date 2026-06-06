@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS ai_views (
   PRIMARY KEY (user_id, day, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 전역 일일 생성량(실제 Gemini 호출) 비용 안전장치
+CREATE TABLE IF NOT EXISTS gen_usage (
+  day   DATE   NOT NULL,
+  count BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 결제 주문
 CREATE TABLE IF NOT EXISTS orders (
   order_id   VARCHAR(64) NOT NULL,

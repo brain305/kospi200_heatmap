@@ -151,6 +151,33 @@ def add_view(user_id, name, day=None):
         return True
 
 
+# ── 전역 일일 생성량(실제 Gemini 호출) — 비용 안전장치 ─────────
+gen_usage = Table(
+    "gen_usage", metadata,
+    Column("day", Date, nullable=False),
+    Column("count", BigInteger, nullable=False, server_default="0"),
+    PrimaryKeyConstraint("day"),
+)
+
+
+def get_global_gen(day=None):
+    day = day or dt.date.today()
+    with get_engine().connect() as conn:
+        return int(conn.execute(select(gen_usage.c.count).where(
+            gen_usage.c.day == day)).scalar() or 0)
+
+
+def incr_global_gen(day=None):
+    day = day or dt.date.today()
+    with get_engine().begin() as conn:
+        cur = conn.execute(select(gen_usage.c.count).where(gen_usage.c.day == day)).scalar()
+        if cur is None:
+            conn.execute(gen_usage.insert().values(day=day, count=1))
+            return 1
+        conn.execute(gen_usage.update().where(gen_usage.c.day == day).values(count=cur + 1))
+        return cur + 1
+
+
 def extend_subscription(user_id, days):
     """오늘 또는 기존 만료일(미래면) 기준으로 days 만큼 연장. 반환: 새 만료일."""
     user = get_user(user_id)

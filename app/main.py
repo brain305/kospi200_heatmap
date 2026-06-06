@@ -88,12 +88,24 @@ def api_summary(request: Request, ticker: str = "", name: str = ""):
     # 과금 정책: (사용자×날짜×종목) 단위 1회 차감. 남이 만든 캐시여도 내가 처음 보면 차감,
     # 같은 종목 재열람은 무료. Gemini 실제 호출은 캐시 미스일 때만(우리 비용 절약).
     already = db.has_viewed(user["id"], name)
-    if not already:
-        if db.get_ai_usage(user["id"]) >= ai_limit:
-            return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
-                                 "ai_limit": ai_limit})
-        db.add_view(user["id"], name)           # 1회 차감(캐시 여부 무관)
+    if not already and db.get_ai_usage(user["id"]) >= ai_limit:
+        return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
+                             "ai_limit": ai_limit})
+
+    # 전역 비용 안전장치: 실제 Gemini 호출(캐시 미스)만 상한 적용
+    will_generate = not summarize.has_cached(name, n)
+    if will_generate and db.get_global_gen() >= config.GLOBAL_AI_DAILY_CAP:
+        return JSONResponse({"error": "busy", "ai_used": db.get_ai_usage(user["id"]),
+                             "ai_limit": ai_limit}, status_code=503)
+
     res = summarize.get_summaries(name, items)   # 캐시 히트면 Gemini 미호출
+    if not res:                                  # 생성 실패(429 등) → 과금하지 않음
+        return JSONResponse({"error": "unavailable", "ai_used": db.get_ai_usage(user["id"]),
+                             "ai_limit": ai_limit}, status_code=503)
+    if will_generate:
+        db.incr_global_gen()                     # 실제 생성 1회 집계
+    if not already:
+        db.add_view(user["id"], name)            # 성공 시에만 1회 차감
     return JSONResponse({
         "summary": res["overall"] or None, "sentiment": res["sentiment"], "score": res["score"],
         "summaries": res["summaries"], "labels": res["labels"],
