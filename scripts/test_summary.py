@@ -30,17 +30,19 @@ def main():
         print("최근 24시간 내 뉴스가 없습니다.")
         return
 
-    res = summarize.get_summaries(name, items) if summarize.enabled() else None
     if not summarize.enabled():
-        print("(GEMINI_API_KEY 없음 → AI 요약 비활성, 키워드 라벨만 표시)\n")
-    if res:
-        print("── [AI 종합 요약] ─────────────────────────────")
-        print(res["overall"] or "(생성 실패)", "\n")
-    print("── [기사별] 키워드 + AI 요약 ───────────────────")
+        print("(GEMINI_API_KEY 없음 → AI 요약 비활성. 무료 사용자는 제목만 표시)\n")
+        for i, it in enumerate(items, 1):
+            print(f"{i:>2}. {it['title']}")
+        return
+    res = summarize.get_summaries(name, items)
+    print("── [AI 종합] ──────────────────────────────────")
+    print(f"종합: {res['sentiment']} {res['score']}%")
+    print(res["overall"] or "(생성 실패)", "\n")
+    print("── [기사별] AI 라벨 + 요약 ─────────────────────")
     for i, it in enumerate(items, 1):
-        print(f"{i:>2}. [{it.get('label','중립')}] {it['title']}")
-        if res:
-            print(f"     ↳ AI요약: {res['items'][i-1] or '(생성 실패)'}")
+        print(f"{i:>2}. [{res['labels'][i-1]}] {it['title']}")
+        print(f"     ↳ {res['summaries'][i-1] or '(생성 실패)'}")
 
 
 if __name__ == "__main__":

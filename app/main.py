@@ -42,20 +42,41 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
     user = auth.current_user(request)
     is_sub = db.is_active_subscriber(user) if user else False
     summary_locked = False
-    overall = None
+    summary_limited = False
+    overall = sentiment = score = None
+    ai_used = ai_limit = None
     out_items = items
     if items and summarize.enabled():
-        if is_sub:
-            res2 = summarize.get_summaries(name, items)
-            overall = res2["overall"] or None
-            # 캐시 오염(비구독자 노출) 방지를 위해 복사본에만 summary 부착
-            out_items = [{**it, "summary": res2["items"][i]} for i, it in enumerate(items)]
-        else:
+        if not is_sub:
             summary_locked = True
+        else:
+            n = len(items)
+            ai_limit = config.AI_DAILY_LIMIT
+            if summarize.has_cached(name, n):
+                generate = True                       # 캐시 히트: Gemini 미호출 → 차감 안 함
+            else:
+                used = db.get_ai_usage(user["id"])
+                if used >= ai_limit:
+                    generate = False
+                    summary_limited = True
+                else:
+                    db.incr_ai_usage(user["id"])      # 생성(캐시 미스) → 1회 차감
+                    generate = True
+            ai_used = db.get_ai_usage(user["id"])
+            if generate:
+                res2 = summarize.get_summaries(name, items)
+                overall = res2["overall"] or None
+                sentiment = res2["sentiment"]
+                score = res2["score"]
+                # 캐시 오염(비구독자 노출) 방지를 위해 복사본에만 요약/라벨 부착
+                out_items = [{**it, "summary": res2["summaries"][i], "label": res2["labels"][i]}
+                             for i, it in enumerate(items)]
 
     payload = {k: v for k, v in result.items() if k != "items"}
     return JSONResponse({"ticker": ticker, "name": name, "items": out_items,
-                         "summary": overall, "summary_locked": summary_locked, **payload})
+                         "summary": overall, "sentiment": sentiment, "score": score,
+                         "summary_locked": summary_locked, "summary_limited": summary_limited,
+                         "ai_used": ai_used, "ai_limit": ai_limit, **payload})
 
 
 @app.get("/api/ad")

@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY uq_provider_uid (provider, provider_uid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- AI 요약 일일 사용량
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_id BIGINT NOT NULL,
+  day     DATE   NOT NULL,
+  count   INT    NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 결제 주문
 CREATE TABLE IF NOT EXISTS orders (
   order_id   VARCHAR(64) NOT NULL,

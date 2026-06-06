@@ -108,6 +108,38 @@ def set_order_status(order_id, status):
         conn.execute(orders.update().where(orders.c.order_id == order_id).values(status=status))
 
 
+# ── AI 요약 일일 사용량 ───────────────────────────────────────
+ai_usage = Table(
+    "ai_usage", metadata,
+    Column("user_id", BigInteger, nullable=False),
+    Column("day", Date, nullable=False),
+    Column("count", Integer, nullable=False, server_default="0"),
+    PrimaryKeyConstraint("user_id", "day"),
+)
+
+
+def get_ai_usage(user_id, day=None):
+    day = day or dt.date.today()
+    with get_engine().connect() as conn:
+        v = conn.execute(select(ai_usage.c.count).where(
+            ai_usage.c.user_id == user_id, ai_usage.c.day == day)).scalar()
+        return int(v or 0)
+
+
+def incr_ai_usage(user_id, day=None):
+    """오늘 사용량 +1, 갱신된 값 반환."""
+    day = day or dt.date.today()
+    with get_engine().begin() as conn:
+        cur = conn.execute(select(ai_usage.c.count).where(
+            ai_usage.c.user_id == user_id, ai_usage.c.day == day)).scalar()
+        if cur is None:
+            conn.execute(ai_usage.insert().values(user_id=user_id, day=day, count=1))
+            return 1
+        conn.execute(ai_usage.update().where(
+            ai_usage.c.user_id == user_id, ai_usage.c.day == day).values(count=cur + 1))
+        return cur + 1
+
+
 def extend_subscription(user_id, days):
     """오늘 또는 기존 만료일(미래면) 기준으로 days 만큼 연장. 반환: 새 만료일."""
     user = get_user(user_id)

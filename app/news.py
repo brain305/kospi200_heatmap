@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from app import config, sentiment
+from app import config
 
 KST = dt.timezone(dt.timedelta(hours=9))
 _TAG = re.compile(r"<[^>]+>")
@@ -89,6 +89,6 @@ def get_news(name):
     except Exception as e:
         return {"items": [], "error": f"fetch_failed: {e}"}
 
-    sentiment.classify(items, name=name)   # 각 항목에 호재/악재/중립 label 부여(키 없으면 생략)
+    # 호재/악재 라벨은 무료에서 제외. 구독자 한정으로 AI(요약 호출 시 함께) 가 부여함.
     _cache[name] = (now, items)
     return {"items": items}
