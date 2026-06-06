@@ -35,7 +35,8 @@
     background:#10141d; border-top:1px solid var(--border); color:var(--muted);
     text-align:center; padding:8px 12px; font-size:13px; }
   #adbar.show{ display:block; }
-  #adbar iframe{ width:100%; max-width:760px; height:150px; border:0; display:block; margin:0 auto; }
+  #adbar .ad-slot{ min-height:120px; }
+  #adbar iframe{ max-width:100%; border:0; display:block; margin:0 auto; }
   .ad-disc{ color:#6b7180; font-size:11px; margin-top:4px; }
 
   /* V2 뉴스 화면 — 종목 클릭 시 전체 화면을 채우는 회색 패널 */
@@ -257,16 +258,37 @@ async function loadAd(){
   if(a.enabled){
     bar.innerHTML = '<div class="ad-slot"></div>'
       + `<div class="ad-disc">${escapeHtml(a.disclosure||"")}</div>`;
-    // 광고 스니펫의 <script> 가 실행되도록 iframe srcdoc 으로 렌더(샌드박스)
-    const ifr = document.createElement("iframe");
-    ifr.setAttribute("scrolling", "no");
-    ifr.srcdoc = a.html;
-    bar.querySelector(".ad-slot").appendChild(ifr);
+    injectAd(bar.querySelector(".ad-slot"), a.html);
     setAd(true);
   } else {
     bar.innerHTML = "";          // 실제 광고 없으면 빈 회색칸도 안 띄움
     setAd(false);
   }
+}
+
+// 광고 스니펫을 '실제 페이지 컨텍스트'에서 실행 (쿠팡 위젯이 도메인/리퍼러를 인식해야 렌더됨)
+// innerHTML 로는 <script> 가 실행 안 되므로, script 엘리먼트를 새로 만들어 순서대로 주입.
+function injectAd(slot, html){
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  const scripts = Array.prototype.slice.call(tmp.querySelectorAll("script"));
+  scripts.forEach(s=>s.parentNode && s.parentNode.removeChild(s));
+  slot.appendChild(tmp);                       // 스크립트 외 마크업(있으면)
+  (function next(i){
+    if(i >= scripts.length) return;
+    const old = scripts[i];
+    const s = document.createElement("script");
+    for(const at of old.attributes) s.setAttribute(at.name, at.value);
+    if(old.src){                               // 외부 g.js: 로드 끝난 뒤 다음 실행
+      s.onload = ()=>next(i+1);
+      s.onerror = ()=>next(i+1);
+      slot.appendChild(s);
+    } else {                                   // 인라인: 즉시 실행 후 다음
+      s.textContent = old.textContent;
+      slot.appendChild(s);
+      next(i+1);
+    }
+  })(0);
 }
 
 // 광고 노출 토글 + 차트 높이 재계산(가림 방지)
