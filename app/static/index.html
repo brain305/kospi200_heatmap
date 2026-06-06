@@ -21,6 +21,25 @@
   #chart{ width:100%; height:calc(100vh - 130px); }
   #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
   #status{ color:var(--muted); font-size:12px; margin-left:8px; }
+
+  /* V2 뉴스 패널 */
+  #newsPanel{ position:fixed; top:0; right:0; height:100%; width:360px; max-width:85vw;
+    background:#222836; border-left:1px solid var(--border); transform:translateX(100%);
+    transition:transform .25s ease; z-index:50; display:flex; flex-direction:column;
+    box-shadow:-8px 0 24px rgba(0,0,0,.35); }
+  #newsPanel.open{ transform:translateX(0); }
+  #newsHead{ display:flex; justify-content:space-between; align-items:center;
+    padding:14px 16px; border-bottom:1px solid var(--border); }
+  #newsTitle{ font-size:17px; font-weight:700; }
+  #newsClose{ cursor:pointer; color:var(--muted); font-size:16px; padding:0 4px; }
+  #newsSub{ color:var(--muted); font-size:12px; padding:8px 16px 4px; }
+  #newsBody{ overflow-y:auto; padding:6px 10px 16px; }
+  .news-item{ display:block; padding:11px 8px; border-bottom:1px solid #2f3645;
+    text-decoration:none; color:var(--fg); }
+  .news-item:hover{ background:#2b313f; }
+  .news-headline{ font-size:14px; line-height:1.4; }
+  .news-meta{ color:var(--muted); font-size:12px; margin-top:4px; }
+  .news-empty{ color:var(--muted); font-size:13px; padding:20px 12px; text-align:center; }
 </style>
 </head>
 <body>
@@ -30,7 +49,16 @@
     <div id="tabs"></div>
   </div>
   <div id="chart"></div>
-  <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대, 상단 'KOSPI200' 클릭 = 뒤로 · 장중엔 자동 갱신</div>
+  <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대 · 종목 클릭 = 뉴스 · 상단 'KOSPI200' 클릭 = 뒤로</div>
+
+  <div id="newsPanel">
+    <div id="newsHead">
+      <span id="newsTitle"></span>
+      <span id="newsClose" onclick="closeNews()">✕</span>
+    </div>
+    <div id="newsSub">최근 24시간 · 최신순 최대 10건</div>
+    <div id="newsBody"></div>
+  </div>
 
 <script>
 const PERIODS = ["실시간","1일","1주","1개월","3개월","1년","YTD"];
@@ -69,8 +97,62 @@ function draw(d){
     font:{ color:"#e6e6e6", family:"Pretendard,'Apple SD Gothic Neo',sans-serif" },
   };
   Plotly.react("chart", data, layout, {responsive:true, displayModeBar:false})
-    .then(togglePathbar);
+    .then(()=>{ togglePathbar(); bindClick(); });
 }
+
+let _bound = false;
+function bindClick(){
+  if(_bound) return;
+  const gd = document.getElementById("chart");
+  gd.on("plotly_treemapclick", function(ev){
+    const p = ev.points && ev.points[0];
+    if(!p) return;
+    const id = p.id || "";
+    if(id.indexOf("stk::") === 0){      // 종목(리프) 클릭 → 뉴스
+      openNews(id.slice(5), p.label);
+      return false;                     // 기본 동작(확대) 막기
+    }
+    // 업종 클릭은 기본 확대 동작 유지
+  });
+  _bound = true;
+}
+
+function escapeHtml(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtTime(iso){ try{ return new Date(iso).toLocaleString("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso; } }
+
+async function openNews(ticker, name){
+  const panel = document.getElementById("newsPanel");
+  panel.classList.add("open");
+  document.getElementById("newsTitle").textContent = name || ticker;
+  document.getElementById("newsBody").innerHTML = '<div class="news-empty">불러오는 중…</div>';
+  try{
+    const r = await fetch(`/api/news?ticker=${encodeURIComponent(ticker)}`);
+    renderNews(await r.json());
+  }catch(e){
+    document.getElementById("newsBody").innerHTML = '<div class="news-empty">불러오기 실패</div>';
+  }
+}
+
+function renderNews(d){
+  const body = document.getElementById("newsBody");
+  if(d.error === "no_api_key"){
+    body.innerHTML = '<div class="news-empty">네이버 API 키가 설정되지 않았어요.<br>.env 에 NAVER_CLIENT_ID/SECRET 추가하세요.</div>';
+    return;
+  }
+  const items = d.items || [];
+  if(!items.length){
+    body.innerHTML = '<div class="news-empty">최근 24시간 내 뉴스가 없어요.</div>';
+    return;
+  }
+  body.innerHTML = items.map(it=>`
+    <a class="news-item" href="${it.link}" target="_blank" rel="noopener">
+      <div class="news-headline">${escapeHtml(it.title)}</div>
+      <div class="news-meta">${escapeHtml(it.source||"")} · ${fmtTime(it.pub)}</div>
+    </a>`).join("");
+}
+
+function closeNews(){ document.getElementById("newsPanel").classList.remove("open"); }
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeNews(); });
 
 function togglePathbar(){
   document.querySelectorAll("#chart g.pathbar").forEach(pb=>{

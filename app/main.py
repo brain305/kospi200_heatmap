@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import db, heatmap
+from app import db, heatmap, news
 
 app = FastAPI(title="KOSPI200 Heatmap")
 
@@ -20,6 +20,18 @@ def _startup():
 @app.get("/api/heatmap")
 def api_heatmap(period: str = "실시간"):
     return JSONResponse(heatmap.build(period))
+
+
+@app.get("/api/news")
+def api_news(ticker: str = "", name: str = ""):
+    """종목 뉴스(최근 24h, 최신순 최대 10). ticker 또는 name 으로 조회."""
+    if ticker and not name:
+        try:
+            name = str(heatmap.get_builder().name_of.get(ticker) or "")
+        except Exception:
+            name = ""
+    result = news.get_news(name)
+    return JSONResponse({"ticker": ticker, "name": name, **result})
 
 
 @app.get("/api/health")

@@ -49,6 +49,8 @@ services:
       KIS_APPSECRET: ${KIS_APPSECRET}
       KRX_ID: ${KRX_ID}
       KRX_PW: ${KRX_PW}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
       TZ: Asia/Seoul
     ports:
       - "8000:8000"

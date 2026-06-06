@@ -22,10 +22,18 @@ kospi200-app/
    ├─ update.py            # Phase2: 증분 업데이트 -> DB upsert
    ├─ realtime.py          # Phase3: KIS 실시간 + 캐시 + 장중판별
    ├─ heatmap.py           # Phase3: 기간 수익률 계산 -> 트리맵 페이로드
-   ├─ main.py              # FastAPI (/ , /api/heatmap)
+   ├─ main.py              # FastAPI (/ , /api/heatmap, /api/news)
+   ├─ news.py              # V2: 종목 뉴스(네이버 검색 API)
    ├─ scheduler.py         # Phase5: 자동 업데이트 + 백업
-   └─ static/index.html    # 프런트(다크 트리맵, 탭, 장중 자동갱신)
+   └─ static/index.html    # 프런트(다크 트리맵, 탭, 뉴스 패널)
 ```
+
+## V2 — 종목 뉴스
+트리맵에서 **종목(박스)을 클릭**하면 오른쪽 패널에 그 기업 뉴스가 떠.
+- 네이버 검색 API 사용. 최근 **24시간 이내**, **최신순 최대 10건** (없으면 빈 목록, 24h 넘은 기사는 제외)
+- 서버가 종목별 30분 캐시 → 반복 클릭 시 호출 절감
+- 키 발급: developers.naver.com → 애플리케이션 등록 → "검색" API 추가 → `.env` 에
+  `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` 입력 (없으면 패널에 안내문구만 뜸)
 
 ## 빠른 시작 (맥미니/맥북)
 ```bash

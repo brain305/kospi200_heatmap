@@ -28,6 +28,11 @@ KIS_BASE = os.getenv("KIS_BASE", "https://openapivts.koreainvestment.com:29443")
 KRX_ID = os.getenv("KRX_ID", "")
 KRX_PW = os.getenv("KRX_PW", "")
 
+# 네이버 검색 API (V2 뉴스)
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
+NEWS_CACHE_TTL = float(os.getenv("NEWS_CACHE_TTL", "1800"))   # 뉴스 캐시(초, 기본 30분)
+
 # 실시간 조회 설정
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))
 RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))
