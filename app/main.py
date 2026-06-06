@@ -38,6 +38,20 @@ def api_news(ticker: str = "", name: str = ""):
     return JSONResponse({"ticker": ticker, "name": name, **result})
 
 
+@app.get("/api/ad")
+def api_ad():
+    """광고 스니펫(쿠팡 파트너스 등). 파일 있으면 enabled. 프런트가 비구독자에게만 렌더."""
+    html = ""
+    if os.path.exists(config.AD_SNIPPET_PATH):
+        try:
+            html = open(config.AD_SNIPPET_PATH, encoding="utf-8").read().strip()
+        except Exception:
+            html = ""
+    return JSONResponse(
+        {"enabled": bool(html), "html": html, "disclosure": config.AD_DISCLOSURE},
+        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}

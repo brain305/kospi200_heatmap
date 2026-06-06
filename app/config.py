@@ -1,7 +1,8 @@
 """환경설정 로딩. .env 를 읽어 os.environ 에 채우고(이미 있으면 유지) 상수로 노출."""
 import os
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # kospi200-app/
+APP_DIR = os.path.dirname(os.path.abspath(__file__))                      # kospi200-app/app/
+PROJECT_DIR = os.path.dirname(APP_DIR)                                    # kospi200-app/
 
 
 def _load_dotenv():
@@ -49,6 +50,13 @@ APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")   # 카카오 
 KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 KAKAO_CLIENT_SECRET = os.getenv("KAKAO_CLIENT_SECRET", "")          # 선택(보안 강화 시)
 KAKAO_REDIRECT_PATH = os.getenv("KAKAO_REDIRECT_PATH", "/auth/kakao/callback")
+
+# ── 광고 (쿠팡 파트너스 등) ──
+# 광고 스니펫은 app/ad_snippet.html 에 붙여넣기 (gitignore 대상, 커밋 금지)
+AD_SNIPPET_PATH = os.getenv("AD_SNIPPET_PATH", os.path.join(APP_DIR, "ad_snippet.html"))
+AD_DISCLOSURE = os.getenv(
+    "AD_DISCLOSURE",
+    "이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.")
 
 # 실시간 조회 설정
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))

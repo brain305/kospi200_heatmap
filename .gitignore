@@ -13,3 +13,6 @@ seed/*
 !seed/.gitkeep
 backups/*
 !backups/.gitkeep
+
+# 광고 스니펫(쿠팡 파트너스 등) - 추적코드 포함이라 커밋 금지
+app/ad_snippet.html

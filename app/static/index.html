@@ -32,9 +32,11 @@
   /* 광고 배너(비구독자에게만) */
   #adbar{ display:none; position:fixed; left:0; right:0; bottom:0; z-index:45;
     background:#10141d; border-top:1px solid var(--border); color:var(--muted);
-    text-align:center; padding:10px 12px; font-size:13px; }
+    text-align:center; padding:8px 12px; font-size:13px; }
   #adbar.show{ display:block; }
   #adClose{ margin-left:12px; cursor:pointer; color:var(--fg); }
+  #adbar iframe{ width:100%; max-width:760px; height:150px; border:0; display:block; margin:0 auto; }
+  .ad-disc{ color:#6b7180; font-size:11px; margin-top:4px; }
 
   /* V2 뉴스 화면 — 종목 클릭 시 전체 화면을 채우는 회색 패널 */
   #newsPanel{ position:fixed; inset:0; width:100%; height:100%;
@@ -247,7 +249,26 @@ async function loadMe(){
       : `<span style="color:var(--muted)">로그인 비활성</span>`;
   }
   // 광고: 구독자에겐 숨김, 그 외(비로그인/무료)엔 표시
-  document.getElementById("adbar").classList.toggle("show", !(d.logged_in && d.is_subscribed));
+  const showAds = !(d.logged_in && d.is_subscribed);
+  document.getElementById("adbar").classList.toggle("show", showAds);
+  if(showAds) loadAd();
+}
+
+async function loadAd(){
+  let a = {enabled:false};
+  try{ a = await (await fetch("/api/ad", {cache:"no-store"})).json(); }catch(e){}
+  const bar = document.getElementById("adbar");
+  if(a.enabled){
+    bar.innerHTML = '<div class="ad-slot"></div>'
+      + `<div class="ad-disc">${escapeHtml(a.disclosure||"")}`
+      + ` <span id="adClose" onclick="document.getElementById('adbar').classList.remove('show')">✕</span></div>`;
+    // 광고 스니펫의 <script> 가 실행되도록 iframe srcdoc 으로 렌더(샌드박스)
+    const ifr = document.createElement("iframe");
+    ifr.setAttribute("scrolling", "no");
+    ifr.srcdoc = a.html;
+    bar.querySelector(".ad-slot").appendChild(ifr);
+  }
+  // a.enabled 가 false 면 기존 placeholder 문구 유지
 }
 
 renderTabs();
