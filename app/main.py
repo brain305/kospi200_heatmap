@@ -48,7 +48,7 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
     if items and summarize.enabled():
         if is_sub:
             summary_available = True
-            ai_limit = config.AI_DAILY_LIMIT
+            ai_limit = config.ai_daily_limit(user)
             ai_used = db.get_ai_usage(user["id"])
             summary_cached = summarize.has_cached(name, len(items))
         else:
@@ -79,7 +79,7 @@ def api_summary(request: Request, ticker: str = "", name: str = ""):
 
     items = (news.get_news(name).get("items") or [])
     n = len(items)
-    ai_limit = config.AI_DAILY_LIMIT
+    ai_limit = config.ai_daily_limit(user)
     if n == 0:
         return JSONResponse({"summary": None, "summaries": [], "labels": [],
                              "ai_used": db.get_ai_usage(user["id"]), "ai_limit": ai_limit})
