@@ -1,6 +1,9 @@
 """DB 공통 모듈: 엔진, daily_prices 테이블 정의, dialect-aware upsert."""
-from sqlalchemy import (create_engine, MetaData, Table, Column, Date, String,
-                        BigInteger, PrimaryKeyConstraint, Index)
+import datetime as dt
+
+from sqlalchemy import (create_engine, MetaData, Table, Column, Date, DateTime,
+                        String, Boolean, BigInteger, Integer, PrimaryKeyConstraint,
+                        UniqueConstraint, Index, select)
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -23,6 +26,56 @@ daily_prices = Table(
 )
 
 _UPDATE_COLS = ["name", "close", "market_cap", "sector"]
+
+# ── V3: 회원 ─────────────────────────────────────────────────
+users = Table(
+    "users", metadata,
+    # MySQL=BIGINT AUTO_INCREMENT, SQLite=INTEGER(rowid 자동증가)
+    Column("id", BigInteger().with_variant(Integer, "sqlite"),
+           primary_key=True, autoincrement=True),
+    Column("provider", String(20), nullable=False),       # 'kakao'
+    Column("provider_uid", String(64), nullable=False),   # 카카오 회원번호
+    Column("nickname", String(60), nullable=False, server_default=""),
+    Column("email", String(120), nullable=False, server_default=""),
+    Column("is_subscribed", Boolean, nullable=False, server_default="0"),
+    Column("subscribed_until", Date, nullable=True),
+    Column("is_admin", Boolean, nullable=False, server_default="0"),
+    Column("created_at", DateTime, nullable=True),
+    UniqueConstraint("provider", "provider_uid", name="uq_provider_uid"),
+    Index("idx_provider_uid", "provider", "provider_uid"),
+)
+
+
+def upsert_user(provider, provider_uid, nickname="", email=""):
+    """소셜 로그인 사용자 upsert. 반환: user row(dict)."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        row = conn.execute(select(users).where(
+            users.c.provider == provider, users.c.provider_uid == str(provider_uid))).mappings().first()
+        if row:
+            conn.execute(users.update().where(users.c.id == row["id"]).values(
+                nickname=nickname or row["nickname"], email=email or row["email"]))
+            return dict(row)
+        res = conn.execute(users.insert().values(
+            provider=provider, provider_uid=str(provider_uid),
+            nickname=nickname, email=email, is_subscribed=False, is_admin=False,
+            created_at=dt.datetime.utcnow()))
+        uid = res.inserted_primary_key[0]
+        return dict(conn.execute(select(users).where(users.c.id == uid)).mappings().first())
+
+
+def get_user(user_id):
+    with get_engine().connect() as conn:
+        row = conn.execute(select(users).where(users.c.id == user_id)).mappings().first()
+        return dict(row) if row else None
+
+
+def is_active_subscriber(user):
+    """구독 활성 여부: is_subscribed AND (만료일 없음 or 오늘 이후)."""
+    if not user or not user.get("is_subscribed"):
+        return False
+    until = user.get("subscribed_until")
+    return until is None or until >= dt.date.today()
 
 
 def get_engine():

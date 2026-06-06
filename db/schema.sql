@@ -11,3 +11,18 @@ CREATE TABLE IF NOT EXISTS daily_prices (
   KEY idx_date (date),
   KEY idx_sector (sector)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- V3: 회원/구독 (없으면 앱 startup 시 SQLAlchemy 가 자동 생성)
+CREATE TABLE IF NOT EXISTS users (
+  id               BIGINT       NOT NULL AUTO_INCREMENT,
+  provider         VARCHAR(20)  NOT NULL,
+  provider_uid     VARCHAR(64)  NOT NULL,
+  nickname         VARCHAR(60)  NOT NULL DEFAULT '',
+  email            VARCHAR(120) NOT NULL DEFAULT '',
+  is_subscribed    TINYINT(1)   NOT NULL DEFAULT 0,
+  subscribed_until DATE         NULL,
+  is_admin         TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at       DATETIME     NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_provider_uid (provider, provider_uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

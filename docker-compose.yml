@@ -55,6 +55,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-insecure-change-me}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       TZ: Asia/Seoul
     ports:
       - "8000:8000"

@@ -43,6 +43,13 @@ OPENAI_BASE = os.getenv("OPENAI_BASE", "https://api.openai.com/v1")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 
+# ── V3: 회원/구독 ──
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-change-me")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")   # 카카오 redirect 기준
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
+KAKAO_CLIENT_SECRET = os.getenv("KAKAO_CLIENT_SECRET", "")          # 선택(보안 강화 시)
+KAKAO_REDIRECT_PATH = os.getenv("KAKAO_REDIRECT_PATH", "/auth/kakao/callback")
+
 # 실시간 조회 설정
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))
 RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))
