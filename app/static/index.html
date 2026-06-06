@@ -19,16 +19,16 @@
     border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; }
   .tab.active{ background:#e9edf5; color:#1b1f2a; font-weight:700; }
   #chart{ width:100%; height:calc(100vh - 130px); }
-  #treeBack{ display:none; position:fixed; left:14px; top:112px; z-index:46;
-    background:#3a78ff; border:none; border-radius:10px;
-    padding:12px 18px; min-height:44px; cursor:pointer; color:#fff; font-weight:800;
-    font-size:15px; box-shadow:0 3px 12px rgba(0,0,0,.4); display:none;
-    align-items:center; gap:6px; }
-  #treeBack:hover{ background:#2f63d6; }
+  #treeBack{ display:none; position:fixed; left:8px; top:90px; z-index:46;
+    width:30px; height:30px; border-radius:7px; padding:0;
+    background:rgba(43,49,63,.92); border:1px solid var(--border);
+    color:#fff; font-size:16px; font-weight:800; line-height:28px; text-align:center;
+    cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  #treeBack:hover{ background:#3a4253; }
   #treeBack:active{ transform:translateY(1px); }
-  #treeBack.show{ display:inline-flex; }
-  #treeBack .arr{ font-size:18px; line-height:1; }
-  @media (max-width:600px){ #treeBack{ left:10px; top:auto; bottom:16px; padding:14px 20px; font-size:16px; } }
+  #treeBack.show{ display:block; }
+  @media (max-width:600px){ #treeBack{ top:auto; bottom:14px; left:10px;
+    width:40px; height:40px; line-height:38px; font-size:20px; } }
   body.ad-on #chart{ height:calc(100vh - 130px - 150px); }  /* 광고 높이만큼 차트 축소 */
   #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
   #status{ color:var(--muted); font-size:12px; margin-left:8px; }
@@ -111,7 +111,7 @@
     <div id="tabs"></div>
   </div>
   <div id="chart"></div>
-  <div id="treeBack" onclick="goRoot()"><span class="arr">←</span> 전체 보기</div>
+  <div id="treeBack" onclick="goRoot()" title="전체 보기">←</div>
   <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대 · 종목 클릭 = 뉴스 · 상단 'KOSPI200' 클릭 = 뒤로</div>
 
   <div id="adbar"></div>
@@ -189,10 +189,9 @@ function bindClick(){
       openNews(id.slice(5), label);
       return false;
     }
-    if(id.indexOf("sec::") === 0){             // 업종 → 직접 확대 + 뒤로가기 버튼 표시
-      Plotly.restyle(gd, {level: id});
+    if(id.indexOf("sec::") === 0){             // 업종 → 네이티브 확대 유지 + 화살표만 표시
       showBack(true);
-      return false;
+      return;                                  // return false 아님 → 기본 확대 동작 유지
     }
     return false;
   });
