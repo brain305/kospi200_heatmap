@@ -78,6 +78,49 @@ def is_active_subscriber(user):
     return until is None or until >= dt.date.today()
 
 
+# ── 결제 주문 ─────────────────────────────────────────────────
+orders = Table(
+    "orders", metadata,
+    Column("order_id", String(64), primary_key=True),
+    Column("user_id", BigInteger, nullable=False),
+    Column("amount", BigInteger, nullable=False),
+    Column("status", String(20), nullable=False, server_default="pending"),  # pending/paid/failed
+    Column("created_at", DateTime, nullable=True),
+    Index("idx_orders_user", "user_id"),
+)
+
+
+def create_order(order_id, user_id, amount):
+    with get_engine().begin() as conn:
+        conn.execute(orders.insert().values(
+            order_id=order_id, user_id=user_id, amount=amount,
+            status="pending", created_at=dt.datetime.utcnow()))
+
+
+def get_order(order_id):
+    with get_engine().connect() as conn:
+        row = conn.execute(select(orders).where(orders.c.order_id == order_id)).mappings().first()
+        return dict(row) if row else None
+
+
+def set_order_status(order_id, status):
+    with get_engine().begin() as conn:
+        conn.execute(orders.update().where(orders.c.order_id == order_id).values(status=status))
+
+
+def extend_subscription(user_id, days):
+    """오늘 또는 기존 만료일(미래면) 기준으로 days 만큼 연장. 반환: 새 만료일."""
+    user = get_user(user_id)
+    today = dt.date.today()
+    cur = user.get("subscribed_until") if user else None
+    base = cur if (cur and cur >= today) else today
+    new_until = base + dt.timedelta(days=days)
+    with get_engine().begin() as conn:
+        conn.execute(users.update().where(users.c.id == user_id).values(
+            is_subscribed=True, subscribed_until=new_until))
+    return new_until
+
+
 def get_engine():
     global _engine
     if _engine is None:

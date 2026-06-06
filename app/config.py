@@ -58,6 +58,13 @@ AD_DISCLOSURE = os.getenv(
     "AD_DISCLOSURE",
     "이 사이트는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.")
 
+# ── 결제/구독 (Toss Payments, 단건결제로 N일 구독) ──
+TOSS_CLIENT_KEY = os.getenv("TOSS_CLIENT_KEY", "")   # test_ck_... / live_ck_...
+TOSS_SECRET_KEY = os.getenv("TOSS_SECRET_KEY", "")   # test_sk_... / live_sk_...
+SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "4900"))
+SUBSCRIPTION_DAYS = int(os.getenv("SUBSCRIPTION_DAYS", "30"))
+SUBSCRIPTION_NAME = os.getenv("SUBSCRIPTION_NAME", "KOSPI200 트리맵 구독 30일")
+
 # 실시간 조회 설정
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))
 RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))

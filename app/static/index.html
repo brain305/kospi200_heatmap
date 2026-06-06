@@ -29,7 +29,20 @@
   .btn{ cursor:pointer; border:1px solid var(--border); border-radius:8px;
     padding:6px 12px; color:var(--fg); background:#2b313f; text-decoration:none; }
   .btn-kakao{ background:#FEE500; color:#191600; border-color:#FEE500; font-weight:700; }
+  .btn-sub{ background:#3a78ff; color:#fff; border-color:#3a78ff; font-weight:700; }
   .badge-sub{ background:#0a9d4a; color:#fff; border-radius:6px; padding:3px 8px; font-weight:700; }
+  /* 내 구독 모달 */
+  #acctModal{ display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.55);
+    align-items:center; justify-content:center; }
+  #acctModal.show{ display:flex; }
+  .acct-card{ background:#222836; border:1px solid var(--border); border-radius:14px;
+    width:360px; max-width:90vw; padding:22px; }
+  .acct-title{ font-size:18px; font-weight:800; margin-bottom:14px; }
+  .acct-row{ display:flex; justify-content:space-between; align-items:center;
+    padding:9px 0; border-bottom:1px solid #2f3645; font-size:14px; }
+  .acct-row .k{ color:var(--muted); }
+  .acct-actions{ margin-top:16px; display:flex; gap:8px; }
+  .acct-note{ color:var(--muted); font-size:12px; margin-top:12px; line-height:1.5; }
   /* 광고 배너(비구독자에게만) */
   #adbar{ display:none; position:fixed; left:0; right:0; bottom:0; z-index:45;
     background:#10141d; border-top:1px solid var(--border); color:var(--muted);
@@ -80,6 +93,10 @@
   <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대 · 종목 클릭 = 뉴스 · 상단 'KOSPI200' 클릭 = 뒤로</div>
 
   <div id="adbar"></div>
+
+  <div id="acctModal" onclick="if(event.target===this)closeAccount()">
+    <div class="acct-card" id="acctCard"></div>
+  </div>
 
   <div id="newsPanel">
     <div id="newsHead">
@@ -233,13 +250,17 @@ function scheduleRefresh(marketOpen){
 }
 
 // ── V3: 로그인/구독 상태 + 광고 게이팅 ──
+let meData = null;
 async function loadMe(){
   let d = {logged_in:false, kakao_enabled:false};
   try{ d = await (await fetch("/api/me", {cache:"no-store"})).json(); }catch(e){}
+  meData = d;
   const bar = document.getElementById("authbar");
   if(d.logged_in){
-    const sub = d.is_subscribed ? '<span class="badge-sub">구독중</span>' : '';
-    bar.innerHTML = `${sub}<span>${escapeHtml(d.nickname||"")}</span>`
+    const sub = d.is_subscribed
+      ? '<span class="badge-sub">구독중</span>'
+      : '<span class="btn btn-sub" onclick="startSubscribe()">구독하기 ₩4,900/월</span>';
+    bar.innerHTML = `${sub}<span class="btn" onclick="openAccount()">${escapeHtml(d.nickname||"회원")} ⚙</span>`
       + `<a class="btn" href="/auth/logout">로그아웃</a>`;
   } else {
     bar.innerHTML = d.kakao_enabled
@@ -298,6 +319,66 @@ function setAd(on){
   const gd = document.getElementById("chart");
   if(gd && window.Plotly && window.Plotly.Plots) Plotly.Plots.resize(gd);
 }
+
+// ── 내 구독 관리 모달 ──
+function daysLeft(iso){
+  const end = new Date(iso + "T23:59:59");
+  return Math.max(0, Math.ceil((end - new Date()) / 86400000));
+}
+async function openAccount(){
+  try{ meData = await (await fetch("/api/me", {cache:"no-store"})).json(); }catch(e){}
+  const d = meData || {};
+  let rows = `<div class="acct-row"><span class="k">닉네임</span><span>${escapeHtml(d.nickname||"")}</span></div>`;
+  rows += `<div class="acct-row"><span class="k">상태</span><span>${d.is_subscribed ? '<span class="badge-sub">구독중</span>' : '미구독'}</span></div>`;
+  if(d.is_subscribed && d.subscribed_until){
+    rows += `<div class="acct-row"><span class="k">만료일</span><span>${d.subscribed_until} (D-${daysLeft(d.subscribed_until)})</span></div>`;
+  }
+  if(d.is_admin) rows += `<div class="acct-row"><span class="k">권한</span><span>관리자</span></div>`;
+  const payLabel = d.is_subscribed ? "구독 연장하기" : "구독하기 ₩4,900/월";
+  document.getElementById("acctCard").innerHTML =
+    `<div class="acct-title">내 구독</div>${rows}`
+    + `<div class="acct-actions">`
+    + `<span class="btn btn-sub" onclick="startSubscribe()">${payLabel}</span>`
+    + `<a class="btn" href="/auth/logout">로그아웃</a>`
+    + `<span class="btn" onclick="closeAccount()">닫기</span></div>`
+    + `<div class="acct-note">단건 결제 상품이라 자동 갱신되지 않아요. 만료 전에 연장 결제하면 남은 기간에 30일이 더해집니다.</div>`;
+  document.getElementById("acctModal").classList.add("show");
+}
+function closeAccount(){ document.getElementById("acctModal").classList.remove("show"); }
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeAccount(); });
+
+// ── 구독 결제 (Toss Payments) ──
+function loadScript(src){
+  return new Promise((res, rej)=>{
+    if(document.querySelector(`script[src="${src}"]`)) return res();
+    const s=document.createElement("script");
+    s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);
+  });
+}
+
+async function startSubscribe(){
+  try{
+    const cfg = await (await fetch("/api/billing/config",{cache:"no-store"})).json();
+    if(!cfg.enabled){ alert("결제가 아직 준비 중이에요. (관리자에게 문의)"); return; }
+    const order = await (await fetch("/api/billing/checkout",{method:"POST"})).json();
+    if(order.error){ alert("로그인이 필요해요."); return; }
+    await loadScript("https://js.tosspayments.com/v1/payment");
+    const toss = TossPayments(order.clientKey);
+    toss.requestPayment("카드", {
+      amount: order.amount, orderId: order.orderId, orderName: order.orderName,
+      customerName: order.customerName,
+      successUrl: order.successUrl, failUrl: order.failUrl,
+    });
+  }catch(e){ alert("결제 시작 중 오류가 발생했어요."); }
+}
+
+// 결제 결과 토스트
+(function(){
+  const p = new URLSearchParams(location.search).get("sub");
+  if(p === "success") setTimeout(()=>alert("구독이 완료됐어요! 광고가 사라집니다."), 300);
+  else if(p === "fail") setTimeout(()=>alert("결제가 취소되었거나 실패했어요."), 300);
+  if(p){ history.replaceState({}, "", location.pathname); }
+})();
 
 renderTabs();
 load();

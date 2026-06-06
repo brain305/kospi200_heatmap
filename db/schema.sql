@@ -26,3 +26,14 @@ CREATE TABLE IF NOT EXISTS users (
   PRIMARY KEY (id),
   UNIQUE KEY uq_provider_uid (provider, provider_uid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 결제 주문
+CREATE TABLE IF NOT EXISTS orders (
+  order_id   VARCHAR(64) NOT NULL,
+  user_id    BIGINT      NOT NULL,
+  amount     BIGINT      NOT NULL,
+  status     VARCHAR(20) NOT NULL DEFAULT 'pending',
+  created_at DATETIME    NULL,
+  PRIMARY KEY (order_id),
+  KEY idx_orders_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

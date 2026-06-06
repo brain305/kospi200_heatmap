@@ -6,12 +6,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import db, heatmap, news, auth, config
+from app import db, heatmap, news, auth, billing, config
 
 app = FastAPI(title="KOSPI200 Heatmap")
 app.add_middleware(SessionMiddleware, secret_key=config.SESSION_SECRET,
                    https_only=False, same_site="lax", max_age=60 * 60 * 24 * 14)
 app.include_router(auth.router)
+app.include_router(billing.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
