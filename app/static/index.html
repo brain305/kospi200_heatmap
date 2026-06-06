@@ -19,6 +19,7 @@
     border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; }
   .tab.active{ background:#e9edf5; color:#1b1f2a; font-weight:700; }
   #chart{ width:100%; height:calc(100vh - 130px); }
+  body.ad-on #chart{ height:calc(100vh - 130px - 200px); }  /* 광고 높이만큼 차트 축소 */
   #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
   #status{ color:var(--muted); font-size:12px; margin-left:8px; }
 
@@ -34,7 +35,6 @@
     background:#10141d; border-top:1px solid var(--border); color:var(--muted);
     text-align:center; padding:8px 12px; font-size:13px; }
   #adbar.show{ display:block; }
-  #adClose{ margin-left:12px; cursor:pointer; color:var(--fg); }
   #adbar iframe{ width:100%; max-width:760px; height:150px; border:0; display:block; margin:0 auto; }
   .ad-disc{ color:#6b7180; font-size:11px; margin-top:4px; }
 
@@ -78,10 +78,7 @@
   <div id="chart"></div>
   <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대 · 종목 클릭 = 뉴스 · 상단 'KOSPI200' 클릭 = 뒤로</div>
 
-  <div id="adbar">
-    📢 광고 영역 — <b>구독하면 광고가 사라져요.</b>
-    <span id="adClose" onclick="document.getElementById('adbar').classList.remove('show')">✕</span>
-  </div>
+  <div id="adbar"></div>
 
   <div id="newsPanel">
     <div id="newsHead">
@@ -248,10 +245,9 @@ async function loadMe(){
       ? `<a class="btn btn-kakao" href="/auth/login">카카오 로그인</a>`
       : `<span style="color:var(--muted)">로그인 비활성</span>`;
   }
-  // 광고: 구독자에겐 숨김, 그 외(비로그인/무료)엔 표시
-  const showAds = !(d.logged_in && d.is_subscribed);
-  document.getElementById("adbar").classList.toggle("show", showAds);
-  if(showAds) loadAd();
+  // 구독자면 광고 영역 자체 제거, 그 외엔 실제 광고가 있을 때만 노출
+  if(d.logged_in && d.is_subscribed){ setAd(false); }
+  else { loadAd(); }
 }
 
 async function loadAd(){
@@ -260,15 +256,25 @@ async function loadAd(){
   const bar = document.getElementById("adbar");
   if(a.enabled){
     bar.innerHTML = '<div class="ad-slot"></div>'
-      + `<div class="ad-disc">${escapeHtml(a.disclosure||"")}`
-      + ` <span id="adClose" onclick="document.getElementById('adbar').classList.remove('show')">✕</span></div>`;
+      + `<div class="ad-disc">${escapeHtml(a.disclosure||"")}</div>`;
     // 광고 스니펫의 <script> 가 실행되도록 iframe srcdoc 으로 렌더(샌드박스)
     const ifr = document.createElement("iframe");
     ifr.setAttribute("scrolling", "no");
     ifr.srcdoc = a.html;
     bar.querySelector(".ad-slot").appendChild(ifr);
+    setAd(true);
+  } else {
+    bar.innerHTML = "";          // 실제 광고 없으면 빈 회색칸도 안 띄움
+    setAd(false);
   }
-  // a.enabled 가 false 면 기존 placeholder 문구 유지
+}
+
+// 광고 노출 토글 + 차트 높이 재계산(가림 방지)
+function setAd(on){
+  document.getElementById("adbar").classList.toggle("show", on);
+  document.body.classList.toggle("ad-on", on);
+  const gd = document.getElementById("chart");
+  if(gd && window.Plotly && window.Plotly.Plots) Plotly.Plots.resize(gd);
 }
 
 renderTabs();
