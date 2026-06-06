@@ -86,11 +86,14 @@ def logout(request: Request):
 def me(request: Request):
     u = current_user(request)
     if not u:
-        return {"logged_in": False, "kakao_enabled": bool(config.KAKAO_REST_API_KEY)}
-    return {
-        "logged_in": True,
-        "nickname": u["nickname"],
-        "is_subscribed": db.is_active_subscriber(u),
-        "subscribed_until": str(u["subscribed_until"]) if u.get("subscribed_until") else None,
-        "is_admin": bool(u["is_admin"]),
-    }
+        body = {"logged_in": False, "kakao_enabled": bool(config.KAKAO_REST_API_KEY)}
+    else:
+        body = {
+            "logged_in": True,
+            "nickname": u["nickname"],
+            "is_subscribed": db.is_active_subscriber(u),
+            "subscribed_until": str(u["subscribed_until"]) if u.get("subscribed_until") else None,
+            "is_admin": bool(u["is_admin"]),
+        }
+    # 로그인 상태가 캐시돼 버튼이 안 바뀌는 문제 방지
+    return JSONResponse(body, headers={"Cache-Control": "no-store"})

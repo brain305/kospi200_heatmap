@@ -235,7 +235,7 @@ function scheduleRefresh(marketOpen){
 // ── V3: 로그인/구독 상태 + 광고 게이팅 ──
 async function loadMe(){
   let d = {logged_in:false, kakao_enabled:false};
-  try{ d = await (await fetch("/api/me")).json(); }catch(e){}
+  try{ d = await (await fetch("/api/me", {cache:"no-store"})).json(); }catch(e){}
   const bar = document.getElementById("authbar");
   if(d.logged_in){
     const sub = d.is_subscribed ? '<span class="badge-sub">구독중</span>' : '';
