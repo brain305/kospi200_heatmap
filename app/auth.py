@@ -60,6 +60,9 @@ def kakao_callback(request: Request, code: str = "", error: str = ""):
         data["client_secret"] = config.KAKAO_CLIENT_SECRET
     try:
         tok = requests.post(KAKAO_TOKEN, data=data, timeout=10).json()
+        if "access_token" not in tok:
+            print(f"[auth] 토큰 발급 실패 응답: {tok} (redirect_uri={_redirect_uri()})")
+            return RedirectResponse("/?login=fail")
         access = tok["access_token"]
         me = requests.get(KAKAO_ME, headers={"Authorization": f"Bearer {access}"},
                           timeout=10).json()
