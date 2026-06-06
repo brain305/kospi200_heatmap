@@ -39,13 +39,20 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 SUMMARY_CACHE_TTL = float(os.getenv("SUMMARY_CACHE_TTL", "10800"))  # 3시간(쿼터 절약). 뉴스는 24h 윈도우
 AI_DAILY_LIMIT = int(os.getenv("AI_DAILY_LIMIT", "10"))            # 일반 구독자 하루 한도
+TEST_AI_DAILY_LIMIT = int(os.getenv("TEST_AI_DAILY_LIMIT", "50"))      # 테스트 권한 하루 한도
 ADMIN_AI_DAILY_LIMIT = int(os.getenv("ADMIN_AI_DAILY_LIMIT", "1000"))  # 관리자 하루 한도
 GLOBAL_AI_DAILY_CAP = int(os.getenv("GLOBAL_AI_DAILY_CAP", "2000"))    # 전체 실호출 상한(비용 안전장치)
 
 
 def ai_daily_limit(user):
-    """사용자별 AI 요약 일일 한도. 관리자는 더 큼."""
-    return ADMIN_AI_DAILY_LIMIT if (user and user.get("is_admin")) else AI_DAILY_LIMIT
+    """사용자별 AI 요약 일일 한도. 관리자 > 테스트 > 일반."""
+    if not user:
+        return AI_DAILY_LIMIT
+    if user.get("is_admin"):
+        return ADMIN_AI_DAILY_LIMIT
+    if user.get("is_test"):
+        return TEST_AI_DAILY_LIMIT
+    return AI_DAILY_LIMIT
 
 # 호재/악재 분류 (V2.1)
 # keyword(기본,무료) | ollama(무료,로컬) | openai(유료)

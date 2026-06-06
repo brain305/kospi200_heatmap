@@ -3,7 +3,7 @@ import datetime as dt
 
 from sqlalchemy import (create_engine, MetaData, Table, Column, Date, DateTime,
                         String, Boolean, BigInteger, Integer, PrimaryKeyConstraint,
-                        UniqueConstraint, Index, select, func)
+                        UniqueConstraint, Index, select, func, inspect, text)
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -40,6 +40,7 @@ users = Table(
     Column("is_subscribed", Boolean, nullable=False, server_default="0"),
     Column("subscribed_until", Date, nullable=True),
     Column("is_admin", Boolean, nullable=False, server_default="0"),
+    Column("is_test", Boolean, nullable=False, server_default="0"),
     Column("created_at", DateTime, nullable=True),
     UniqueConstraint("provider", "provider_uid", name="uq_provider_uid"),
     Index("idx_provider_uid", "provider", "provider_uid"),
@@ -198,9 +199,23 @@ def get_engine():
     return _engine
 
 
+def _ensure_column(conn, table, col, ddl_mysql, ddl_sqlite):
+    """기존 테이블에 컬럼이 없으면 추가(간이 마이그레이션)."""
+    cols = [c["name"] for c in inspect(conn).get_columns(table)]
+    if col in cols:
+        return
+    ddl = ddl_sqlite if conn.engine.dialect.name == "sqlite" else ddl_mysql
+    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+
+
 def init_db():
-    """테이블 없으면 생성."""
-    metadata.create_all(get_engine())
+    """테이블 없으면 생성 + 누락 컬럼 보강."""
+    eng = get_engine()
+    metadata.create_all(eng)
+    with eng.begin() as conn:
+        _ensure_column(conn, "users", "is_test",
+                       "is_test TINYINT(1) NOT NULL DEFAULT 0",
+                       "is_test INTEGER NOT NULL DEFAULT 0")
 
 
 def upsert_rows(rows, chunk=1000):

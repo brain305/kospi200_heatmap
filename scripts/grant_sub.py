@@ -42,6 +42,8 @@ def main():
     ap.add_argument("--kakao")
     ap.add_argument("--days", type=int, default=30)
     ap.add_argument("--admin", action="store_true")
+    ap.add_argument("--test", action="store_true", help="테스트 권한(AI 요약 하루 50회)")
+    ap.add_argument("--untest", action="store_true", help="테스트 권한 해제")
     ap.add_argument("--revoke", action="store_true")
     args = ap.parse_args()
 
@@ -56,7 +58,8 @@ def main():
             print("(회원 없음)")
         for r in rows:
             print(f"  id={r['id']} kakao={r['provider_uid']} '{r['nickname']}' "
-                  f"sub={bool(r['is_subscribed'])} until={r['subscribed_until']} admin={bool(r['is_admin'])}")
+                  f"sub={bool(r['is_subscribed'])} until={r['subscribed_until']} "
+                  f"test={bool(r['is_test'])} admin={bool(r['is_admin'])}")
         return
 
     with eng.begin() as conn:
@@ -72,6 +75,10 @@ def main():
                         subscribed_until=dt.date.today() + dt.timedelta(days=args.days))
         if args.admin:
             vals["is_admin"] = True
+        if args.test:
+            vals["is_test"] = True
+        if args.untest:
+            vals["is_test"] = False
         conn.execute(u.update().where(u.c.id == row["id"]).values(**vals))
         print(f"완료: id={row['id']} '{row['nickname']}' -> {vals}")
 

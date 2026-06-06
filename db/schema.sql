@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_subscribed    TINYINT(1)   NOT NULL DEFAULT 0,
   subscribed_until DATE         NULL,
   is_admin         TINYINT(1)   NOT NULL DEFAULT 0,
+  is_test          TINYINT(1)   NOT NULL DEFAULT 0,
   created_at       DATETIME     NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_provider_uid (provider, provider_uid)
