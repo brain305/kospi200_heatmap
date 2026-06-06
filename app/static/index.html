@@ -191,6 +191,8 @@ function bindClick(){
     }
     // 업종 클릭은 기본 확대 동작 유지
   });
+  // 확대/축소(드릴다운)될 때마다 경로바·뒤로가기 버튼 갱신
+  gd.on("plotly_afterplot", function(){ setTimeout(togglePathbar, 0); });
   _bound = true;
 }
 
