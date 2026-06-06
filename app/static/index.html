@@ -19,7 +19,7 @@
     border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; }
   .tab.active{ background:#e9edf5; color:#1b1f2a; font-weight:700; }
   #chart{ width:100%; height:calc(100vh - 130px); }
-  body.ad-on #chart{ height:calc(100vh - 130px - 200px); }  /* 광고 높이만큼 차트 축소 */
+  body.ad-on #chart{ height:calc(100vh - 130px - 150px); }  /* 광고 높이만큼 차트 축소 */
   #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
   #status{ color:var(--muted); font-size:12px; margin-left:8px; }
 
@@ -33,11 +33,11 @@
   /* 광고 배너(비구독자에게만) */
   #adbar{ display:none; position:fixed; left:0; right:0; bottom:0; z-index:45;
     background:#10141d; border-top:1px solid var(--border); color:var(--muted);
-    text-align:center; padding:8px 12px; font-size:13px; }
+    text-align:center; padding:2px 8px 0; font-size:13px; line-height:0; }
   #adbar.show{ display:block; }
-  #adbar .ad-slot{ min-height:120px; }
-  #adbar iframe{ max-width:100%; border:0; display:block; margin:0 auto; }
-  .ad-disc{ color:#6b7180; font-size:11px; margin-top:4px; }
+  #adbar .ad-slot{ line-height:0; }
+  #adbar iframe{ max-width:100%; border:0; display:block; margin:0 auto; vertical-align:bottom; }
+  .ad-disc{ color:#6b7180; font-size:10px; line-height:1.2; margin:1px 0 2px; }
 
   /* V2 뉴스 화면 — 종목 클릭 시 전체 화면을 채우는 회색 패널 */
   #newsPanel{ position:fixed; inset:0; width:100%; height:100%;
