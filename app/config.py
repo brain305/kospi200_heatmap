@@ -93,6 +93,7 @@ SUBSCRIPTION_NAME = os.getenv("SUBSCRIPTION_NAME", "KOSPI200 트리맵 구독 30
 RT_MAX_WORKERS = int(os.getenv("RT_MAX_WORKERS", "4"))
 RT_SLEEP_SEC = float(os.getenv("RT_SLEEP_SEC", "0.25"))
 RT_CACHE_TTL = float(os.getenv("RT_CACHE_TTL", "10"))   # 실시간 서버 캐시(초)
+WATCH_QUOTE_TTL = float(os.getenv("WATCH_QUOTE_TTL", "30"))  # 관심목록 종목단위 캐시(초)
 DF_CACHE_TTL = float(os.getenv("DF_CACHE_TTL", "300"))  # DB 로딩 캐시(초)
 
 TOKEN_CACHE = os.getenv("TOKEN_CACHE", os.path.join(PROJECT_DIR, "data", "kis_token.json"))

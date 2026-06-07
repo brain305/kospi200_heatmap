@@ -201,7 +201,7 @@ def api_watchlist_live(request: Request):
     rt = {}
     if market_open:
         try:
-            rt, _c, _ok, _e = realtime.fetch_realtime(tickers)
+            rt = realtime.get_quotes_cached(tickers)   # 종목단위 30초 캐시
         except Exception:
             rt = {}
     try:

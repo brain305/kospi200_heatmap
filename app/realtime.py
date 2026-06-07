@@ -101,6 +101,25 @@ def fetch_realtime(tickers):
     return ret, cap, ok, err
 
 
+_quote_cache = {}   # ticker -> (ts, pct)  관심목록 등 소량 조회용 종목단위 캐시
+
+
+def get_quotes_cached(tickers):
+    """관심목록용: 종목 단위 짧은 캐시(기본 30초). 장중에만 신규 조회.
+    반환: {ticker: pct} (장마감/실패 종목은 누락 → 호출측이 1일로 폴백)."""
+    if not is_market_open():
+        return {}
+    ttl = config.WATCH_QUOTE_TTL
+    now = time.time()
+    stale = [t for t in tickers if t not in _quote_cache or now - _quote_cache[t][0] >= ttl]
+    if stale:
+        ret, _cap, _ok, _err = fetch_realtime(stale)
+        for t, p in ret.items():
+            if p is not None:
+                _quote_cache[t] = (now, p)
+    return {t: _quote_cache[t][1] for t in tickers if t in _quote_cache}
+
+
 def get_realtime_cached(tickers):
     """서버 측 TTL 캐시. 장중이 아니면 빈 결과(=프런트가 1일로 폴백)."""
     if not is_market_open():
