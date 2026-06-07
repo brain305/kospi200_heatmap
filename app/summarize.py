@@ -96,6 +96,12 @@ def has_cached(name, n):
     return bool(c and time.time() - c[0] < config.SUMMARY_CACHE_TTL and len(c[1]["summaries"]) == n)
 
 
+def cache_ts(name):
+    """현재 캐시된 요약의 생성 시각(epoch). 없으면 None. 과금 '버전' 식별용."""
+    c = _cache.get(name)
+    return c[0] if c else None
+
+
 def get_summaries(name, items):
     """전체요약+종합감성+점수+기사별(요약/라벨). 캐시 사용.
     성공 시 dict, 실패(키없음/429/파싱불가) 시 None → 호출측이 과금하지 않도록."""

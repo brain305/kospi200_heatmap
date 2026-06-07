@@ -28,13 +28,40 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY uq_provider_uid (provider, provider_uid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- AI 요약 열람 기록 (사용자×날짜×종목 단위 1회 과금)
-CREATE TABLE IF NOT EXISTS ai_views (
+-- AI 요약 과금 기록 (사용자×종목×요약버전(gen) 단위 1회)
+CREATE TABLE IF NOT EXISTS ai_charges (
   user_id    BIGINT      NOT NULL,
-  day        DATE        NOT NULL,
   name       VARCHAR(40) NOT NULL,
+  gen        BIGINT      NOT NULL,
+  day        DATE        NOT NULL,
   created_at DATETIME    NULL,
-  PRIMARY KEY (user_id, day, name)
+  PRIMARY KEY (user_id, name, gen),
+  KEY idx_charge_user_day (user_id, day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 관심종목
+CREATE TABLE IF NOT EXISTS watchlist (
+  user_id    BIGINT      NOT NULL,
+  ticker     VARCHAR(6)  NOT NULL,
+  name       VARCHAR(40) NOT NULL DEFAULT '',
+  created_at DATETIME    NULL,
+  PRIMARY KEY (user_id, ticker),
+  KEY idx_watch_ticker (ticker)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 급등락 알림
+CREATE TABLE IF NOT EXISTS alerts (
+  id         BIGINT      NOT NULL AUTO_INCREMENT,
+  user_id    BIGINT      NOT NULL,
+  ticker     VARCHAR(6)  NOT NULL,
+  name       VARCHAR(40) NOT NULL DEFAULT '',
+  direction  VARCHAR(4)  NOT NULL,
+  pct        DOUBLE      NOT NULL,
+  day        DATE        NOT NULL,
+  is_read    TINYINT(1)  NOT NULL DEFAULT 0,
+  created_at DATETIME    NULL,
+  PRIMARY KEY (id),
+  KEY idx_alerts_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 전역 일일 생성량(실제 Gemini 호출) 비용 안전장치

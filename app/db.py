@@ -2,7 +2,7 @@
 import datetime as dt
 
 from sqlalchemy import (create_engine, MetaData, Table, Column, Date, DateTime,
-                        String, Boolean, BigInteger, Integer, PrimaryKeyConstraint,
+                        String, Boolean, BigInteger, Integer, Float, PrimaryKeyConstraint,
                         UniqueConstraint, Index, select, func, inspect, text)
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -109,47 +109,150 @@ def set_order_status(order_id, status):
         conn.execute(orders.update().where(orders.c.order_id == order_id).values(status=status))
 
 
-# ── AI 요약 열람 기록 (사용자×날짜×종목 단위 1회 과금) ──────────
-ai_views = Table(
-    "ai_views", metadata,
+# ── AI 요약 과금 기록 (사용자×종목×요약버전(gen) 단위 1회) ──────
+# gen = 요약 캐시 생성 시각(epoch 정수). 3시간 뒤 재생성되면 gen 이 바뀌어 재과금됨.
+ai_charges = Table(
+    "ai_charges", metadata,
     Column("user_id", BigInteger, nullable=False),
-    Column("day", Date, nullable=False),
     Column("name", String(40), nullable=False),
+    Column("gen", BigInteger, nullable=False),
+    Column("day", Date, nullable=False),
     Column("created_at", DateTime, nullable=True),
-    PrimaryKeyConstraint("user_id", "day", "name"),
+    PrimaryKeyConstraint("user_id", "name", "gen"),
+    Index("idx_charge_user_day", "user_id", "day"),
 )
 
 
 def get_ai_usage(user_id, day=None):
-    """오늘 차감된 종목 수(=요약 열람한 고유 종목 수)."""
+    """오늘 차감 횟수(요약 버전 단위). 일일 한도 비교용."""
     day = day or dt.date.today()
     with get_engine().connect() as conn:
-        return int(conn.execute(
-            select(func.count()).select_from(ai_views).where(
-                ai_views.c.user_id == user_id, ai_views.c.day == day)).scalar() or 0)
+        return int(conn.execute(select(func.count()).select_from(ai_charges).where(
+            ai_charges.c.user_id == user_id, ai_charges.c.day == day)).scalar() or 0)
 
 
-def has_viewed(user_id, name, day=None):
-    """오늘 이 종목을 이미 차감했는지(재열람은 무료)."""
-    day = day or dt.date.today()
+def has_charged(user_id, name, gen):
+    """이 사용자가 이 종목의 '이 요약 버전(gen)'에 이미 차감했는지(재열람 무료)."""
     with get_engine().connect() as conn:
-        return conn.execute(select(ai_views.c.name).where(
-            ai_views.c.user_id == user_id, ai_views.c.day == day,
-            ai_views.c.name == name)).first() is not None
+        return conn.execute(select(ai_charges.c.gen).where(
+            ai_charges.c.user_id == user_id, ai_charges.c.name == name,
+            ai_charges.c.gen == int(gen))).first() is not None
 
 
-def add_view(user_id, name, day=None):
-    """차감 기록 추가. 새로 차감되면 True, 이미 있으면 False."""
+def add_charge(user_id, name, gen, day=None):
+    """과금 기록 추가. 새로 차감되면 True, 이미 있으면 False."""
     day = day or dt.date.today()
     with get_engine().begin() as conn:
-        exists = conn.execute(select(ai_views.c.name).where(
-            ai_views.c.user_id == user_id, ai_views.c.day == day,
-            ai_views.c.name == name)).first()
+        exists = conn.execute(select(ai_charges.c.gen).where(
+            ai_charges.c.user_id == user_id, ai_charges.c.name == name,
+            ai_charges.c.gen == int(gen))).first()
         if exists:
             return False
-        conn.execute(ai_views.insert().values(
-            user_id=user_id, day=day, name=name, created_at=dt.datetime.utcnow()))
+        conn.execute(ai_charges.insert().values(
+            user_id=user_id, name=name, gen=int(gen), day=day,
+            created_at=dt.datetime.utcnow()))
         return True
+
+
+# ── 관심종목 & 급등락 알림 ────────────────────────────────────
+watchlist = Table(
+    "watchlist", metadata,
+    Column("user_id", BigInteger, nullable=False),
+    Column("ticker", String(6), nullable=False),
+    Column("name", String(40), nullable=False, server_default=""),
+    Column("created_at", DateTime, nullable=True),
+    PrimaryKeyConstraint("user_id", "ticker"),
+    Index("idx_watch_ticker", "ticker"),
+)
+
+alerts = Table(
+    "alerts", metadata,
+    Column("id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True),
+    Column("user_id", BigInteger, nullable=False),
+    Column("ticker", String(6), nullable=False),
+    Column("name", String(40), nullable=False, server_default=""),
+    Column("direction", String(4), nullable=False),   # up / down
+    Column("pct", Float, nullable=False),
+    Column("day", Date, nullable=False),
+    Column("is_read", Boolean, nullable=False, server_default="0"),
+    Column("created_at", DateTime, nullable=True),
+    Index("idx_alerts_user", "user_id"),
+)
+
+
+def add_watch(user_id, ticker, name=""):
+    with get_engine().begin() as conn:
+        ex = conn.execute(select(watchlist.c.ticker).where(
+            watchlist.c.user_id == user_id, watchlist.c.ticker == ticker)).first()
+        if ex:
+            return False
+        conn.execute(watchlist.insert().values(
+            user_id=user_id, ticker=ticker, name=name, created_at=dt.datetime.utcnow()))
+        return True
+
+
+def remove_watch(user_id, ticker):
+    with get_engine().begin() as conn:
+        conn.execute(watchlist.delete().where(
+            watchlist.c.user_id == user_id, watchlist.c.ticker == ticker))
+
+
+def get_watch(user_id):
+    with get_engine().connect() as conn:
+        return [dict(r) for r in conn.execute(select(watchlist).where(
+            watchlist.c.user_id == user_id).order_by(watchlist.c.created_at)).mappings()]
+
+
+def count_watch(user_id):
+    with get_engine().connect() as conn:
+        return int(conn.execute(select(func.count()).select_from(watchlist).where(
+            watchlist.c.user_id == user_id)).scalar() or 0)
+
+
+def distinct_watch():
+    """관심종목으로 등록된 (ticker -> name) 전체."""
+    with get_engine().connect() as conn:
+        rows = conn.execute(select(watchlist.c.ticker, watchlist.c.name).distinct()).all()
+    return {t: n for t, n in rows}
+
+
+def watchers_of(ticker):
+    with get_engine().connect() as conn:
+        return [r[0] for r in conn.execute(select(watchlist.c.user_id).where(
+            watchlist.c.ticker == ticker)).all()]
+
+
+def create_alert(user_id, ticker, name, direction, pct, day=None):
+    """하루 (user,ticker,direction) 1회만 생성. 생성 시 True."""
+    day = day or dt.date.today()
+    with get_engine().begin() as conn:
+        ex = conn.execute(select(alerts.c.id).where(
+            alerts.c.user_id == user_id, alerts.c.ticker == ticker,
+            alerts.c.direction == direction, alerts.c.day == day)).first()
+        if ex:
+            return False
+        conn.execute(alerts.insert().values(
+            user_id=user_id, ticker=ticker, name=name, direction=direction,
+            pct=float(pct), day=day, is_read=False, created_at=dt.datetime.utcnow()))
+        return True
+
+
+def get_alerts(user_id, limit=50):
+    with get_engine().connect() as conn:
+        return [dict(r) for r in conn.execute(select(alerts).where(
+            alerts.c.user_id == user_id).order_by(alerts.c.id.desc()).limit(limit)).mappings()]
+
+
+def count_unread(user_id):
+    with get_engine().connect() as conn:
+        return int(conn.execute(select(func.count()).select_from(alerts).where(
+            alerts.c.user_id == user_id, alerts.c.is_read == False)).scalar() or 0)  # noqa: E712
+
+
+def mark_alerts_read(user_id):
+    with get_engine().begin() as conn:
+        conn.execute(alerts.update().where(
+            alerts.c.user_id == user_id, alerts.c.is_read == False).values(is_read=True))  # noqa: E712
 
 
 # ── 전역 일일 생성량(실제 Gemini 호출) — 비용 안전장치 ─────────

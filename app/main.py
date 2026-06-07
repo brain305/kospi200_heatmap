@@ -3,6 +3,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -50,8 +51,12 @@ def api_news(request: Request, ticker: str = "", name: str = ""):
             summary_available = True
             ai_limit = config.ai_daily_limit(user)
             ai_used = db.get_ai_usage(user["id"])
-            # 오늘 이미 이 종목을 봤으면 재열람 무료
-            summary_cached = db.has_viewed(user["id"], name)
+            # 현재 캐시된 '요약 버전'에 이미 과금했으면 무료(재열람). 캐시 없거나 신버전이면 과금 예정.
+            if summarize.has_cached(name, len(items)):
+                gen = int(summarize.cache_ts(name) or 0)
+                summary_cached = db.has_charged(user["id"], name, gen)
+            else:
+                summary_cached = False
         else:
             summary_locked = True
 
@@ -87,25 +92,35 @@ def api_summary(request: Request, ticker: str = "", name: str = ""):
 
     # 과금 정책: (사용자×날짜×종목) 단위 1회 차감. 남이 만든 캐시여도 내가 처음 보면 차감,
     # 같은 종목 재열람은 무료. Gemini 실제 호출은 캐시 미스일 때만(우리 비용 절약).
-    already = db.has_viewed(user["id"], name)
-    if not already and db.get_ai_usage(user["id"]) >= ai_limit:
-        return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
-                             "ai_limit": ai_limit})
-
-    # 전역 비용 안전장치: 실제 Gemini 호출(캐시 미스)만 상한 적용
-    will_generate = not summarize.has_cached(name, n)
-    if will_generate and db.get_global_gen() >= config.GLOBAL_AI_DAILY_CAP:
-        return JSONResponse({"error": "busy", "ai_used": db.get_ai_usage(user["id"]),
-                             "ai_limit": ai_limit}, status_code=503)
-
-    res = summarize.get_summaries(name, items)   # 캐시 히트면 Gemini 미호출
-    if not res:                                  # 생성 실패(429 등) → 과금하지 않음
-        return JSONResponse({"error": "unavailable", "ai_used": db.get_ai_usage(user["id"]),
-                             "ai_limit": ai_limit}, status_code=503)
-    if will_generate:
-        db.incr_global_gen()                     # 실제 생성 1회 집계
-    if not already:
-        db.add_view(user["id"], name)            # 성공 시에만 1회 차감
+    cached = summarize.has_cached(name, n)
+    if cached:
+        # 캐시 히트: 이 버전에 이미 과금했으면 무료, 아니면 신버전이라 과금(한도 확인)
+        gen = int(summarize.cache_ts(name) or 0)
+        already = db.has_charged(user["id"], name, gen)
+        if not already and db.get_ai_usage(user["id"]) >= ai_limit:
+            return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit})
+        res = summarize.get_summaries(name, items)         # Gemini 미호출
+        if not res:
+            return JSONResponse({"error": "unavailable", "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit}, status_code=503)
+        if not already:
+            db.add_charge(user["id"], name, gen)           # 신버전 1회 차감
+    else:
+        # 캐시 미스 → 새 요약 생성(우리 비용 발생) → 무조건 신버전 과금
+        if db.get_ai_usage(user["id"]) >= ai_limit:
+            return JSONResponse({"limited": True, "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit})
+        if db.get_global_gen() >= config.GLOBAL_AI_DAILY_CAP:
+            return JSONResponse({"error": "busy", "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit}, status_code=503)
+        res = summarize.get_summaries(name, items)         # Gemini 호출
+        if not res:                                        # 실패(429 등) → 과금/집계 안 함
+            return JSONResponse({"error": "unavailable", "ai_used": db.get_ai_usage(user["id"]),
+                                 "ai_limit": ai_limit}, status_code=503)
+        db.incr_global_gen()
+        gen = int(summarize.cache_ts(name) or 0)
+        db.add_charge(user["id"], name, gen)               # 새 버전 1회 차감
     return JSONResponse({
         "summary": res["overall"] or None, "sentiment": res["sentiment"], "score": res["score"],
         "summaries": res["summaries"], "labels": res["labels"],
@@ -125,6 +140,71 @@ def api_ad():
     return JSONResponse(
         {"enabled": bool(html), "html": html, "disclosure": config.AD_DISCLOSURE},
         headers={"Cache-Control": "no-store"})
+
+
+def _resolve_name(ticker, name=""):
+    if name:
+        return name
+    try:
+        return str(heatmap.get_builder().name_of.get(ticker) or "")
+    except Exception:
+        return ""
+
+
+@app.get("/api/watchlist")
+def api_watchlist_get(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    return JSONResponse(jsonable_encoder({"items": db.get_watch(user["id"])}),
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/watchlist")
+async def api_watchlist_add(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    body = await request.json()
+    ticker = (body.get("ticker") or "").strip()
+    if not ticker:
+        return JSONResponse({"error": "no_ticker"}, status_code=400)
+    # 무료 사용자 관심종목 개수 제한(구독자/관리자/테스트는 무제한)
+    privileged = db.is_active_subscriber(user) or user.get("is_admin") or user.get("is_test")
+    if not privileged and db.count_watch(user["id"]) >= config.WATCHLIST_FREE_MAX:
+        return JSONResponse({"error": "limit", "max": config.WATCHLIST_FREE_MAX}, status_code=403)
+    db.add_watch(user["id"], ticker, _resolve_name(ticker, body.get("name", "")))
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/watchlist")
+def api_watchlist_del(request: Request, ticker: str = ""):
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    db.remove_watch(user["id"], ticker)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/alerts")
+def api_alerts(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"logged_in": False, "items": [], "unread": 0},
+                            headers={"Cache-Control": "no-store"})
+    return JSONResponse(jsonable_encoder(
+        {"logged_in": True, "items": db.get_alerts(user["id"]),
+         "unread": db.count_unread(user["id"])}),
+        headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/alerts/read")
+def api_alerts_read(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    db.mark_alerts_read(user["id"])
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/health")

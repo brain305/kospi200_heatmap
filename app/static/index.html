@@ -100,10 +100,27 @@
   .sent-pos{ background:#0a9d4a; color:#fff; }
   .sent-neg{ background:#c40000; color:#fff; }
   .sent-neu{ background:#3a4253; color:#cfd4de; }
+  /* 관심종목 별 */
+  #watchBtn{ cursor:pointer; font-size:22px; color:#ffce3a; margin-left:6px; vertical-align:middle; }
+  /* 알림 벨 + 배지 */
+  #bellBadge{ display:none; background:#e8333a; color:#fff; font-size:11px; font-weight:800;
+    border-radius:10px; padding:0 5px; margin-left:3px; vertical-align:top; }
+  #alertPanel{ display:none; position:fixed; top:54px; right:16px; width:320px; max-width:90vw;
+    max-height:60vh; overflow-y:auto; z-index:55; background:#222836;
+    border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.45); padding:8px; }
+  #alertPanel.open{ display:block; }
+  .al-item{ display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:10px 10px; border-bottom:1px solid #2f3645; font-size:14px; }
+  .al-item.al-new{ background:#2b313f; border-radius:8px; }
+  .al-up{ color:#23c265; font-weight:700; }
+  .al-down{ color:#f2433d; font-weight:700; }
+  .al-time{ color:var(--muted); font-size:11px; white-space:nowrap; }
+  .al-empty{ color:var(--muted); text-align:center; padding:24px 12px; font-size:14px; }
 </style>
 </head>
 <body>
   <div id="authbar"></div>
+  <div id="alertPanel"></div>
 
   <div id="top">
     <span id="title">KOSPI200 시가총액 트리맵</span><span id="asof"></span>
@@ -124,6 +141,7 @@
     <div id="newsHead">
       <div id="newsHeadL">
         <span id="newsTitle"></span>
+        <span id="watchBtn" onclick="toggleWatch()" title="관심종목" style="display:none">☆</span>
         <span id="newsSub">최근 24시간 · 최신순 최대 10건 · 호재/악재는 자동 추정(참고용)</span>
       </div>
       <span id="newsClose" onclick="closeNews()">← 뒤로</span>
@@ -207,6 +225,7 @@ async function openNews(ticker, name){
   const panel = document.getElementById("newsPanel");
   panel.classList.add("open");
   document.getElementById("newsTitle").textContent = name || ticker;
+  updateWatchStar();
   setBody('<div class="news-empty">불러오는 중…</div>');
   try{
     const r = await fetch(`/api/news?ticker=${encodeURIComponent(ticker)}`);
@@ -328,6 +347,88 @@ function scheduleRefresh(marketOpen){
   }
 }
 
+// ── 관심종목 & 알림 ──
+let meLoggedIn = false;
+let watchSet = new Set();
+let lastAlerts = [];
+let alertTimer = null;
+
+async function initWatchAndAlerts(){
+  try{
+    const w = await (await fetch("/api/watchlist", {cache:"no-store"})).json();
+    watchSet = new Set((w.items||[]).map(x=>x.ticker));
+  }catch(e){}
+  updateWatchStar();
+  refreshAlerts();
+  if(!alertTimer) alertTimer = setInterval(refreshAlerts, 60000);  // 1분마다 미읽음 갱신
+}
+
+function updateWatchStar(){
+  const b = document.getElementById("watchBtn");
+  if(!b) return;
+  if(!meLoggedIn || !curTicker){ b.style.display = "none"; return; }
+  b.style.display = "inline";
+  b.textContent = watchSet.has(curTicker) ? "★" : "☆";
+}
+
+async function toggleWatch(){
+  if(!meLoggedIn){ alert("로그인이 필요해요."); return; }
+  const t = curTicker;
+  if(watchSet.has(t)){
+    await fetch(`/api/watchlist?ticker=${encodeURIComponent(t)}`, {method:"DELETE"});
+    watchSet.delete(t);
+  } else {
+    const r = await fetch("/api/watchlist", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({ticker:t})});
+    if(r.status === 403){ alert("무료는 관심종목 5개까지예요. 구독하면 무제한이에요!"); return; }
+    watchSet.add(t);
+  }
+  updateWatchStar();
+}
+
+async function refreshAlerts(){
+  if(!meLoggedIn) return;
+  try{
+    const d = await (await fetch("/api/alerts", {cache:"no-store"})).json();
+    lastAlerts = d.items || [];
+    const b = document.getElementById("bellBadge");
+    if(b){
+      const n = d.unread || 0;
+      b.textContent = n > 0 ? (n > 99 ? "99+" : n) : "";
+      b.style.display = n > 0 ? "inline-block" : "none";
+    }
+  }catch(e){}
+}
+
+function renderAlerts(){
+  const p = document.getElementById("alertPanel");
+  if(!lastAlerts.length){ p.innerHTML = '<div class="al-empty">최근 알림이 없어요.<br>관심종목이 ±10% 변동하면 여기 떠요.</div>'; return; }
+  p.innerHTML = lastAlerts.map(a=>{
+    const up = a.direction === "up";
+    const sign = a.pct > 0 ? "+" : "";
+    return `<div class="al-item ${a.is_read?'':'al-new'}">`
+      + `<span class="${up?'al-up':'al-down'}">${up?'▲':'▼'} ${escapeHtml(a.name||a.ticker)} ${sign}${(a.pct).toFixed(1)}%</span>`
+      + `<span class="al-time">${fmtTime(a.created_at)}</span></div>`;
+  }).join("");
+}
+
+async function toggleAlerts(){
+  const p = document.getElementById("alertPanel");
+  const open = p.classList.toggle("open");
+  if(open){
+    await refreshAlerts();
+    renderAlerts();
+    try{ await fetch("/api/alerts/read", {method:"POST"}); }catch(e){}
+    const b = document.getElementById("bellBadge");
+    if(b){ b.textContent = ""; b.style.display = "none"; }
+  }
+}
+document.addEventListener("click", e=>{
+  const p = document.getElementById("alertPanel");
+  if(p && p.classList.contains("open") && !p.contains(e.target) && e.target.id !== "bell")
+    p.classList.remove("open");
+});
+
 // ── V3: 로그인/구독 상태 + 광고 게이팅 ──
 let meData = null;
 async function loadMe(){
@@ -336,12 +437,16 @@ async function loadMe(){
   meData = d;
   const bar = document.getElementById("authbar");
   if(d.logged_in){
+    meLoggedIn = true;
     const sub = d.is_subscribed
       ? '<span class="badge-sub">구독중</span>'
       : '<span class="btn btn-sub" onclick="startSubscribe()">구독하기 ₩4,900/월</span>';
-    bar.innerHTML = `${sub}<span class="btn" onclick="openAccount()">${escapeHtml(d.nickname||"회원")} ⚙</span>`
+    bar.innerHTML = `${sub}<span class="btn" id="bell" onclick="toggleAlerts()">🔔<b id="bellBadge"></b></span>`
+      + `<span class="btn" onclick="openAccount()">${escapeHtml(d.nickname||"회원")} ⚙</span>`
       + `<a class="btn" href="/auth/logout">로그아웃</a>`;
+    initWatchAndAlerts();
   } else {
+    meLoggedIn = false;
     bar.innerHTML = d.kakao_enabled
       ? `<a class="btn btn-kakao" href="/auth/login">카카오 로그인</a>`
       : `<span style="color:var(--muted)">로그인 비활성</span>`;

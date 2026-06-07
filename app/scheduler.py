@@ -34,6 +34,32 @@ def run_update():
         print(f"update 오류: {e}")
 
 
+def check_alerts():
+    """장중 5분마다 관심종목 실시간 등락률 점검 → ±임계% 돌파 시 알림 생성(하루 1회/방향)."""
+    from app import realtime
+    if not realtime.is_market_open():
+        return
+    watch = db.distinct_watch()          # {ticker: name}
+    if not watch:
+        return
+    tickers = list(watch.keys())
+    ret, _cap, ok, err = realtime.fetch_realtime(tickers)
+    thr = config.ALERT_THRESHOLD_PCT
+    made = 0
+    for ticker, pct in ret.items():
+        if pct is None:
+            continue
+        direction = "up" if pct >= thr else ("down" if pct <= -thr else None)
+        if not direction:
+            continue
+        name = watch.get(ticker, "")
+        for uid in db.watchers_of(ticker):
+            if db.create_alert(uid, ticker, name, direction, pct):
+                made += 1
+    if made:
+        print(f"[{dt.datetime.now():%F %T}] 알림 {made}건 생성 (조회 {ok}/{len(tickers)})")
+
+
 def backup():
     """daily_prices 전체를 csv.gz 로 저장하고 오래된 백업 정리."""
     os.makedirs(config.BACKUP_DIR, exist_ok=True)
@@ -60,6 +86,9 @@ def main():
     sched.add_job(backup, CronTrigger(hour=config.BACKUP_CRON_HOUR,
                   minute=config.BACKUP_CRON_MIN),
                   id="daily_backup", misfire_grace_time=3600)
+    # 관심종목 급등락 알림: 평일 장중 5분마다 (함수 내부에서 09:00~15:30 재확인)
+    sched.add_job(check_alerts, CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5"),
+                  id="alert_check", misfire_grace_time=120)
     print("스케줄러 시작:")
     for j in sched.get_jobs():
         print(f"  - {j.id}: {j.trigger}")
