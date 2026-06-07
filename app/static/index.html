@@ -18,7 +18,30 @@
   .tab{ background:var(--panel); color:var(--fg); border:1px solid var(--border);
     border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer; }
   .tab.active{ background:#e9edf5; color:#1b1f2a; font-weight:700; }
-  #chart{ width:100%; height:calc(100vh - 130px); }
+  #main{ display:flex; width:100%; height:calc(100vh - 130px); }
+  #chart{ flex:1 1 auto; min-width:0; height:100%; }
+  /* 관심목록 사이드바: 데스크탑=히트맵 오른쪽 상시 */
+  #watchSide{ display:none; flex:0 0 250px; height:100%; overflow-y:auto;
+    background:#1f2531; border-left:1px solid var(--border); }
+  body.wl-on #watchSide{ display:block; }
+  #wsHead{ display:flex; justify-content:space-between; align-items:center;
+    padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px; color:var(--muted); }
+  #wsHead b{ color:var(--fg); font-size:14px; }
+  .ws-item{ display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:11px 12px; border-bottom:1px solid #2a3140; font-size:14px; cursor:pointer; }
+  .ws-item:hover{ background:#272d3a; }
+  .ws-name{ font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ws-up{ color:#23c265; font-weight:800; white-space:nowrap; }
+  .ws-down{ color:#f2433d; font-weight:800; white-space:nowrap; }
+  .ws-flat{ color:#cfd4de; font-weight:700; white-space:nowrap; }
+  .ws-empty{ color:var(--muted); font-size:13px; padding:24px 14px; text-align:center; line-height:1.6; }
+  /* 모바일: 세로로 쌓아 히트맵 아래에 관심목록(스크롤) */
+  @media (max-width:700px){
+    #main{ flex-direction:column; height:auto; }
+    #chart{ height:70vh; }
+    body.ad-on #chart{ height:calc(70vh - 150px); }
+    #watchSide{ flex:none; width:100%; height:auto; border-left:none; border-top:1px solid var(--border); }
+  }
   #treeBack{ display:none; position:fixed; left:8px; top:90px; z-index:46;
     width:30px; height:30px; border-radius:7px; padding:0;
     background:rgba(43,49,63,.92); border:1px solid var(--border);
@@ -29,7 +52,7 @@
   #treeBack.show{ display:block; }
   @media (max-width:600px){ #treeBack{ top:auto; bottom:14px; left:10px;
     width:40px; height:40px; line-height:38px; font-size:20px; } }
-  body.ad-on #chart{ height:calc(100vh - 130px - 150px); }  /* 광고 높이만큼 차트 축소 */
+  body.ad-on #main{ height:calc(100vh - 130px - 150px); }   /* 광고 높이만큼 축소(데스크탑) */
   #foot{ text-align:center; color:var(--muted); font-size:11px; padding:4px 0 8px; }
   #status{ color:var(--muted); font-size:12px; margin-left:8px; }
 
@@ -135,14 +158,16 @@
 <body>
   <div id="authbar"></div>
   <div id="alertPanel"></div>
-  <div id="watchPanel"></div>
 
   <div id="top">
     <span id="title">KOSPI200 시가총액 트리맵</span><span id="asof"></span>
     <span id="status"></span>
     <div id="tabs"></div>
   </div>
-  <div id="chart"></div>
+  <div id="main">
+    <div id="chart"></div>
+    <aside id="watchSide"></aside>
+  </div>
   <div id="treeBack" onclick="goRoot()" title="전체 보기">←</div>
   <div id="foot">박스 크기 = 시가총액 · 색상 = 등락률 · 업종 클릭 = 확대 · 종목 클릭 = 뉴스 · 상단 'KOSPI200' 클릭 = 뒤로</div>
 
@@ -376,6 +401,7 @@ async function initWatchAndAlerts(){
   updateWatchStar();
   refreshAlerts();
   if(!alertTimer) alertTimer = setInterval(refreshAlerts, 60000);  // 1분마다 미읽음 갱신
+  startWatchSide();                                                // 관심목록 사이드바 상시 표시
 }
 
 function updateWatchStar(){
@@ -399,6 +425,7 @@ async function toggleWatch(){
     watchSet.add(t);
   }
   updateWatchStar();
+  renderWatchSide();   // 사이드바 즉시 반영
 }
 
 async function refreshAlerts(){
@@ -442,28 +469,46 @@ document.addEventListener("click", e=>{
   const p = document.getElementById("alertPanel");
   if(p && p.classList.contains("open") && !p.contains(e.target) && e.target.id !== "bell")
     p.classList.remove("open");
-  const w = document.getElementById("watchPanel");
-  if(w && w.classList.contains("open") && !w.contains(e.target) && e.target.id !== "wlBtn")
-    w.classList.remove("open");
 });
 
-// ── 관심목록(실시간 등락률) 패널 ──
-async function toggleWatchlist(){
-  const p = document.getElementById("watchPanel");
-  const open = p.classList.toggle("open");
-  if(!open) return;
-  p.innerHTML = '<div class="wl-empty">불러오는 중…</div>';
+// ── 관심목록 사이드바(상시) ──
+let wlTimer = null;
+function resizeChart(){
+  const gd = document.getElementById("chart");
+  if(gd && window.Plotly && window.Plotly.Plots) Plotly.Plots.resize(gd);
+}
+
+// 📋 버튼: 사이드바 접기/펴기
+function toggleWatchlist(){
+  const on = document.body.classList.toggle("wl-on");
+  resizeChart();
+  if(on) renderWatchSide();
+}
+
+async function renderWatchSide(){
+  if(!document.body.classList.contains("wl-on")) return;
+  const el = document.getElementById("watchSide");
   let d = {items:[]};
   try{ d = await (await fetch("/api/watchlist/live", {cache:"no-store"})).json(); }catch(e){}
   const items = d.items || [];
-  if(!items.length){ p.innerHTML = '<div class="wl-empty">관심종목이 없어요.<br>종목 클릭 후 ☆ 를 눌러 추가하세요.</div>'; return; }
-  const head = `<div class="wl-head">${d.market_open ? "● 실시간 등락률" : "○ 장 마감 · 1일 기준"}</div>`;
-  p.innerHTML = head + items.map(it=>{
-    let cls="wl-flat", txt="-";
-    if(it.pct!=null){ const v=it.pct; cls = v>0?"wl-up":(v<0?"wl-down":"wl-flat"); txt=(v>0?"+":"")+v.toFixed(2)+"%"; }
-    return `<div class="wl-item" onclick="openNews('${it.ticker}','${escapeHtml(it.name)}');document.getElementById('watchPanel').classList.remove('open');">`
-      + `<span class="wl-name">${escapeHtml(it.name||it.ticker)}</span><span class="${cls}">${txt}</span></div>`;
+  const head = `<div id="wsHead"><b>📋 관심목록</b><span>${d.market_open?"● 실시간":"○ 1일 기준"}</span></div>`;
+  if(!items.length){
+    el.innerHTML = head + '<div class="ws-empty">관심종목이 없어요.<br>종목을 클릭한 뒤 ☆ 를 눌러 추가하세요.</div>';
+    return;
+  }
+  el.innerHTML = head + items.map(it=>{
+    let cls="ws-flat", txt="-";
+    if(it.pct!=null){ const v=it.pct; cls=v>0?"ws-up":(v<0?"ws-down":"ws-flat"); txt=(v>0?"+":"")+v.toFixed(2)+"%"; }
+    return `<div class="ws-item" onclick="openNews('${it.ticker}','${escapeHtml(it.name)}')">`
+      + `<span class="ws-name">${escapeHtml(it.name||it.ticker)}</span><span class="${cls}">${txt}</span></div>`;
   }).join("");
+}
+
+function startWatchSide(){
+  document.body.classList.add("wl-on");
+  resizeChart();
+  renderWatchSide();
+  if(!wlTimer) wlTimer = setInterval(renderWatchSide, 60000);  // 1분마다 등락률 갱신
 }
 
 // ── V3: 로그인/구독 상태 + 광고 게이팅 ──
