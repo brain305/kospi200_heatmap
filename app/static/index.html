@@ -116,11 +116,26 @@
   .al-down{ color:#f2433d; font-weight:700; }
   .al-time{ color:var(--muted); font-size:11px; white-space:nowrap; }
   .al-empty{ color:var(--muted); text-align:center; padding:24px 12px; font-size:14px; }
+  /* 관심목록 패널 */
+  #watchPanel{ display:none; position:fixed; top:54px; right:16px; width:300px; max-width:90vw;
+    max-height:60vh; overflow-y:auto; z-index:55; background:#222836;
+    border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.45); padding:8px; }
+  #watchPanel.open{ display:block; }
+  .wl-head{ color:var(--muted); font-size:12px; padding:6px 10px 8px; }
+  .wl-item{ display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:10px; border-bottom:1px solid #2f3645; font-size:14px; cursor:pointer; }
+  .wl-item:hover{ background:#2b313f; border-radius:8px; }
+  .wl-name{ font-weight:600; }
+  .wl-up{ color:#23c265; font-weight:800; }
+  .wl-down{ color:#f2433d; font-weight:800; }
+  .wl-flat{ color:#cfd4de; font-weight:700; }
+  .wl-empty{ color:var(--muted); text-align:center; padding:24px 12px; font-size:14px; }
 </style>
 </head>
 <body>
   <div id="authbar"></div>
   <div id="alertPanel"></div>
+  <div id="watchPanel"></div>
 
   <div id="top">
     <span id="title">KOSPI200 시가총액 트리맵</span><span id="asof"></span>
@@ -427,7 +442,29 @@ document.addEventListener("click", e=>{
   const p = document.getElementById("alertPanel");
   if(p && p.classList.contains("open") && !p.contains(e.target) && e.target.id !== "bell")
     p.classList.remove("open");
+  const w = document.getElementById("watchPanel");
+  if(w && w.classList.contains("open") && !w.contains(e.target) && e.target.id !== "wlBtn")
+    w.classList.remove("open");
 });
+
+// ── 관심목록(실시간 등락률) 패널 ──
+async function toggleWatchlist(){
+  const p = document.getElementById("watchPanel");
+  const open = p.classList.toggle("open");
+  if(!open) return;
+  p.innerHTML = '<div class="wl-empty">불러오는 중…</div>';
+  let d = {items:[]};
+  try{ d = await (await fetch("/api/watchlist/live", {cache:"no-store"})).json(); }catch(e){}
+  const items = d.items || [];
+  if(!items.length){ p.innerHTML = '<div class="wl-empty">관심종목이 없어요.<br>종목 클릭 후 ☆ 를 눌러 추가하세요.</div>'; return; }
+  const head = `<div class="wl-head">${d.market_open ? "● 실시간 등락률" : "○ 장 마감 · 1일 기준"}</div>`;
+  p.innerHTML = head + items.map(it=>{
+    let cls="wl-flat", txt="-";
+    if(it.pct!=null){ const v=it.pct; cls = v>0?"wl-up":(v<0?"wl-down":"wl-flat"); txt=(v>0?"+":"")+v.toFixed(2)+"%"; }
+    return `<div class="wl-item" onclick="openNews('${it.ticker}','${escapeHtml(it.name)}');document.getElementById('watchPanel').classList.remove('open');">`
+      + `<span class="wl-name">${escapeHtml(it.name||it.ticker)}</span><span class="${cls}">${txt}</span></div>`;
+  }).join("");
+}
 
 // ── V3: 로그인/구독 상태 + 광고 게이팅 ──
 let meData = null;
@@ -441,7 +478,8 @@ async function loadMe(){
     const sub = d.is_subscribed
       ? '<span class="badge-sub">구독중</span>'
       : '<span class="btn btn-sub" onclick="startSubscribe()">구독하기 ₩4,900/월</span>';
-    bar.innerHTML = `${sub}<span class="btn" id="bell" onclick="toggleAlerts()">🔔<b id="bellBadge"></b></span>`
+    bar.innerHTML = `${sub}<span class="btn" id="wlBtn" onclick="toggleWatchlist()">📋 관심</span>`
+      + `<span class="btn" id="bell" onclick="toggleAlerts()">🔔<b id="bellBadge"></b></span>`
       + `<span class="btn" onclick="openAccount()">${escapeHtml(d.nickname||"회원")} ⚙</span>`
       + `<a class="btn" href="/auth/logout">로그아웃</a>`;
     initWatchAndAlerts();

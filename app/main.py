@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import db, heatmap, news, auth, billing, summarize, config
+from app import db, heatmap, news, auth, billing, summarize, realtime, config
 
 app = FastAPI(title="KOSPI200 Heatmap")
 app.add_middleware(SessionMiddleware, secret_key=config.SESSION_SECRET,
@@ -184,6 +184,40 @@ def api_watchlist_del(request: Request, ticker: str = ""):
         return JSONResponse({"error": "login_required"}, status_code=401)
     db.remove_watch(user["id"], ticker)
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/watchlist/live")
+def api_watchlist_live(request: Request):
+    """관심종목 + 현재 등락률(장중=실시간, 장마감=1일 기준)."""
+    user = auth.current_user(request)
+    if not user:
+        return JSONResponse({"error": "login_required"}, status_code=401)
+    items = db.get_watch(user["id"])
+    market_open = realtime.is_market_open()
+    if not items:
+        return JSONResponse({"items": [], "market_open": market_open},
+                            headers={"Cache-Control": "no-store"})
+    tickers = [it["ticker"] for it in items]
+    rt = {}
+    if market_open:
+        try:
+            rt, _c, _ok, _e = realtime.fetch_realtime(tickers)
+        except Exception:
+            rt = {}
+    try:
+        b = heatmap.get_builder()
+    except Exception:
+        b = None
+    out = []
+    for it in items:
+        t = it["ticker"]
+        pct = rt.get(t)
+        if pct is None and b is not None:
+            pct = b.ret.get("1일", {}).get(t)
+        nm = it["name"] or (str(b.name_of.get(t, "")) if b is not None else "")
+        out.append({"ticker": t, "name": nm, "pct": pct})
+    return JSONResponse({"items": out, "market_open": market_open},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/alerts")
